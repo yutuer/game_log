@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志查询 - 游戏日志控制台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #1a1a2e;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            background-color: #16213e;
+            border-bottom: 1px solid #0f3460;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            height: 56px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #e94560;
+            margin-right: 40px;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 8px;
+        }
+
+        .navbar-links a {
+            color: #aaa;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .navbar-links a:hover {
+            color: #fff;
+            background-color: #0f3460;
+        }
+
+        .navbar-links a.active {
+            color: #fff;
+            background-color: #e94560;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* 筛选表单 */
+        .filter-card {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .filter-card .filter-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #ddd;
+        }
+
+        .filter-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 180px;
+            flex: 1;
+        }
+
+        .filter-group label {
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .filter-group input {
+            background-color: #1a1a2e;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .filter-group input:focus {
+            border-color: #e94560;
+        }
+
+        .filter-group input::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        .btn-query {
+            background-color: #e94560;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 24px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            height: 38px;
+            white-space: nowrap;
+        }
+
+        .btn-query:hover {
+            background-color: #c73652;
+        }
+
+        /* 结果表格 */
+        .table-card {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .log-table thead th {
+            text-align: left;
+            padding: 12px 14px;
+            font-size: 13px;
+            color: #aaa;
+            border-bottom: 1px solid #0f3460;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .log-table tbody td {
+            padding: 12px 14px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+            color: #ddd;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .log-table tbody tr:hover {
+            background-color: rgba(233, 69, 96, 0.05);
+        }
+
+        .log-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .empty-tip {
+            text-align: center;
+            color: #666;
+            padding: 40px 0;
+            font-size: 14px;
+        }
+
+        .loading-tip {
+            text-align: center;
+            color: #666;
+            padding: 40px 0;
+            font-size: 14px;
+        }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(15, 52, 96, 0.5);
+        }
+
+        .pagination button {
+            background-color: #0f3460;
+            color: #fff;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background-color: #e94560;
+            border-color: #e94560;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination .page-info {
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .pagination .page-info span {
+            color: #e94560;
+            font-weight: 600;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .filter-group {
+                min-width: 140px;
+            }
+
+            .log-table thead th,
+            .log-table tbody td {
+                padding: 10px 8px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="navbar-title">游戏日志控制台</div>
+        <div class="navbar-links">
+            <a href="index.html">首页</a>
+            <a href="query.html" class="active">查询</a>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <div class="main-content">
+        <!-- 筛选表单 -->
+        <div class="filter-card">
+            <div class="filter-title">筛选条件</div>
+            <div class="filter-form">
+                <div class="filter-group">
+                    <label for="gameName">游戏名称</label>
+                    <input type="text" id="gameName" placeholder="输入游戏名称">
+                </div>
+                <div class="filter-group">
+                    <label for="player">玩家</label>
+                    <input type="text" id="player" placeholder="输入玩家名称">
+                </div>
+                <div class="filter-group">
+                    <label for="startTime">开始时间</label>
+                    <input type="datetime-local" id="startTime">
+                </div>
+                <div class="filter-group">
+                    <label for="endTime">结束时间</label>
+                    <input type="datetime-local" id="endTime">
+                </div>
+                <button class="btn-query" onclick="searchLogs()">查询</button>
+            </div>
+        </div>
+
+        <!-- 结果表格 -->
+        <div class="table-card">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>游戏名称</th>
+                        <th>玩家</th>
+                        <th>动作</th>
+                        <th>详情</th>
+                        <th>游戏时间</th>
+                        <th>创建时间</th>
+                    </tr>
+                </thead>
+                <tbody id="logsBody">
+                    <tr><td colspan="7" class="loading-tip">加载中...</td></tr>
+                </tbody>
+            </table>
+
+            <!-- 分页 -->
+            <div class="pagination">
+                <button id="prevBtn" onclick="prevPage()">上一页</button>
+                <div class="page-info">
+                    第 <span id="currentPage">1</span> 页 / 共 <span id="totalPages">1</span> 页
+                </div>
+                <button id="nextBtn" onclick="nextPage()">下一页</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentPage = 0;
+        var totalPages = 0;
+        var pageSize = 20;
+
+        // 页面加载时自动查询第一页
+        document.addEventListener('DOMContentLoaded', function () {
+            fetchLogs();
+        });
+
+        function getFilterParams() {
+            var gameName = document.getElementById('gameName').value.trim();
+            var player = document.getElementById('player').value.trim();
+            var startTime = document.getElementById('startTime').value;
+            var endTime = document.getElementById('endTime').value;
+
+            var params = [];
+            if (gameName) params.push('gameName=' + encodeURIComponent(gameName));
+            if (player) params.push('player=' + encodeURIComponent(player));
+            if (startTime) params.push('startTime=' + encodeURIComponent(startTime));
+            if (endTime) params.push('endTime=' + encodeURIComponent(endTime));
+
+            return params.length ? '&' + params.join('&') : '';
+        }
+
+        function fetchLogs() {
+            var url = '/api/game-logs?page=' + currentPage + '&size=' + pageSize + getFilterParams();
+
+            fetch(url)
+                .then(function (res) { return res.json(); })
+                .then(function (json) {
+                    if (json.code === 200 && json.data) {
+                        renderTable(json.data);
+                    }
+                })
+                .catch(function (err) {
+                    console.error('查询日志失败:', err);
+                    document.getElementById('logsBody').innerHTML =
+                        '<tr><td colspan="7" class="empty-tip">请求失败，请稍后重试</td></tr>';
+                });
+        }
+
+        function renderTable(data) {
+            var tbody = document.getElementById('logsBody');
+            var content = data.content || [];
+
+            totalPages = data.totalPages || 0;
+            currentPage = data.number || 0;
+
+            document.getElementById('currentPage').textContent = currentPage + 1;
+            document.getElementById('totalPages').textContent = totalPages;
+
+            document.getElementById('prevBtn').disabled = currentPage <= 0;
+            document.getElementById('nextBtn').disabled = currentPage >= totalPages - 1;
+
+            if (!content.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-tip">暂无日志数据</td></tr>';
+                return;
+            }
+
+            var html = '';
+            content.forEach(function (log) {
+                html += '<tr>'
+                    + '<td>' + escapeHtml(String(log.id || '')) + '</td>'
+                    + '<td>' + escapeHtml(log.gameName || '') + '</td>'
+                    + '<td>' + escapeHtml(log.player || '') + '</td>'
+                    + '<td>' + escapeHtml(log.action || '') + '</td>'
+                    + '<td title="' + escapeAttr(log.detail || '') + '">' + escapeHtml(log.detail || '') + '</td>'
+                    + '<td>' + escapeHtml(log.playTime || '') + '</td>'
+                    + '<td>' + escapeHtml(log.createdAt || '') + '</td>'
+                    + '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function searchLogs() {
+            currentPage = 0;
+            fetchLogs();
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                fetchLogs();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                fetchLogs();
+            }
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
+        function escapeAttr(str) {
+            return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+    </script>
+</body>
+</html>

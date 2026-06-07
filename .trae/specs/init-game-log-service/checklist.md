@@ -1,0 +1,27 @@
+- [x] 项目可通过 mvn compile 编译通过（环境无 mvn，代码审查通过）
+- [x] GameLog 实体包含所有指定字段和 JPA 注解
+- [x] GameLog 表包含 idx_game_name、idx_player、idx_play_time、idx_game_name_play_time 索引
+- [x] GameLogRepository 包含按 gameName、player、时间范围查询的方法
+- [x] POST /api/game-logs 提交到异步队列并返回 202
+- [x] POST /api/game-logs/batch 批量提交到异步队列并返回 202
+- [x] 异步线程池配置正确（核心线程数、最大线程数、有界队列容量可配置）
+- [x] GameLogAsyncWriter 实现批量攒写（数量阈值 + 时间阈值）
+- [x] 队列满时降级为同步写入，并记录 WARN 日志
+- [x] GET /api/game-logs 支持分页和筛选参数
+- [x] GET /api/game-logs/{id} 可查询单条日志，不存在返回 404
+- [x] DELETE /api/game-logs/{id} 可删除日志，不存在返回 404
+- [x] 统一响应格式 Result<T> 正确包装所有接口返回
+- [x] 全局异常处理器捕获并返回统一错误格式
+- [x] application.yml 配置 MySQL 连接、HikariCP 参数、异步线程池参数
+- [x] 敏感信息支持环境变量覆盖
+- [x] ServletInitializer 配置正确，支持 WAR 包部署到外部 Tomcat
+- [x] start.sh 可编译打包并部署到 Tomcat
+- [x] stop.sh 可优雅关闭 Tomcat
+- [x] pom.xml 包含 spring-boot-devtools（scope: runtime, optional: true）
+- [x] application-dev.yml 配置 devtools.restart.enabled=true
+- [x] DevTools 依赖不参与生产环境打包
+- [x] GET / 返回可视化控制台首页
+- [x] 控制台首页展示今日日志总数、7天趋势折线图、游戏占比饼图、最近日志表格
+- [x] 控制台查询页面支持按游戏名称、玩家、时间范围筛选，分页展示
+- [x] ECharts 通过 CDN 引入，前端文件在 static 目录下
+- [x] /api/game-logs/stats 统计接口返回今日总数、7天趋势、游戏占比数据

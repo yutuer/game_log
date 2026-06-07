@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏日志控制台</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #1a1a2e;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            background-color: #16213e;
+            border-bottom: 1px solid #0f3460;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            height: 56px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #e94560;
+            margin-right: 40px;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 8px;
+        }
+
+        .navbar-links a {
+            color: #aaa;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .navbar-links a:hover {
+            color: #fff;
+            background-color: #0f3460;
+        }
+
+        .navbar-links a.active {
+            color: #fff;
+            background-color: #e94560;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* 概览卡片 */
+        .overview-card {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .overview-card .label {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+
+        .overview-card .value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #e94560;
+        }
+
+        /* 图表区域 */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .charts-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-card {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .chart-card .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #ddd;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 400px;
+        }
+
+        /* 最近日志表格 */
+        .table-card {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .table-card .table-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #ddd;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .log-table thead th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #aaa;
+            border-bottom: 1px solid #0f3460;
+            font-weight: 500;
+        }
+
+        .log-table tbody td {
+            padding: 12px 16px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+            color: #ddd;
+        }
+
+        .log-table tbody tr:hover {
+            background-color: rgba(233, 69, 96, 0.05);
+        }
+
+        .log-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .empty-tip {
+            text-align: center;
+            color: #666;
+            padding: 40px 0;
+            font-size: 14px;
+        }
+
+        /* 加载动画 */
+        .loading {
+            text-align: center;
+            padding: 60px 0;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="navbar-title">游戏日志控制台</div>
+        <div class="navbar-links">
+            <a href="index.html" class="active">首页</a>
+            <a href="query.html">查询</a>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <div class="main-content">
+        <!-- 今日日志总数 -->
+        <div class="overview-card">
+            <div class="label">今日日志总数</div>
+            <div class="value" id="todayCount">--</div>
+        </div>
+
+        <!-- 图表行 -->
+        <div class="charts-row">
+            <div class="chart-card">
+                <div class="chart-title">近7天日志趋势</div>
+                <div class="chart-container" id="trendChart"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">各游戏日志占比</div>
+                <div class="chart-container" id="pieChart"></div>
+            </div>
+        </div>
+
+        <!-- 最近日志 -->
+        <div class="table-card">
+            <div class="table-title">最近日志</div>
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>游戏名称</th>
+                        <th>玩家</th>
+                        <th>动作</th>
+                        <th>游戏时间</th>
+                    </tr>
+                </thead>
+                <tbody id="recentLogsBody">
+                    <tr><td colspan="4" class="loading">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载时获取数据
+        document.addEventListener('DOMContentLoaded', function () {
+            fetchStats();
+        });
+
+        function fetchStats() {
+            fetch('/api/game-logs/stats')
+                .then(function (res) { return res.json(); })
+                .then(function (json) {
+                    if (json.code === 200 && json.data) {
+                        renderStats(json.data);
+                    }
+                })
+                .catch(function (err) {
+                    console.error('获取统计数据失败:', err);
+                });
+        }
+
+        function renderStats(data) {
+            // 今日日志总数
+            document.getElementById('todayCount').textContent = data.todayCount != null ? data.todayCount : 0;
+
+            // 趋势图
+            renderTrendChart(data.trend || []);
+
+            // 饼图
+            renderPieChart(data.gameDistribution || []);
+
+            // 最近日志
+            renderRecentLogs(data.recentLogs || []);
+        }
+
+        function renderTrendChart(trend) {
+            var chart = echarts.init(document.getElementById('trendChart'));
+            var dates = trend.map(function (item) { return item.date; });
+            var counts = trend.map(function (item) { return item.count; });
+
+            chart.setOption({
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: '#16213e',
+                    borderColor: '#0f3460',
+                    textStyle: { color: '#fff' }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    top: '10%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    data: dates,
+                    axisLine: { lineStyle: { color: '#0f3460' } },
+                    axisLabel: { color: '#aaa' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#0f3460' } },
+                    axisLabel: { color: '#aaa' },
+                    splitLine: { lineStyle: { color: 'rgba(15,52,96,0.5)' } }
+                },
+                series: [{
+                    name: '日志数',
+                    type: 'line',
+                    data: counts,
+                    smooth: true,
+                    lineStyle: { color: '#e94560', width: 2 },
+                    itemStyle: { color: '#e94560' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(233,69,96,0.3)' },
+                            { offset: 1, color: 'rgba(233,69,96,0.02)' }
+                        ])
+                    }
+                }]
+            });
+
+            window.addEventListener('resize', function () { chart.resize(); });
+        }
+
+        function renderPieChart(distribution) {
+            var chart = echarts.init(document.getElementById('pieChart'));
+            var pieData = distribution.map(function (item) {
+                return { name: item.gameName, value: item.count };
+            });
+
+            chart.setOption({
+                tooltip: {
+                    trigger: 'item',
+                    backgroundColor: '#16213e',
+                    borderColor: '#0f3460',
+                    textStyle: { color: '#fff' }
+                },
+                legend: {
+                    orient: 'vertical',
+                    right: '5%',
+                    top: 'center',
+                    textStyle: { color: '#aaa' }
+                },
+                series: [{
+                    name: '游戏日志占比',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['40%', '50%'],
+                    avoidLabelOverlap: true,
+                    itemStyle: {
+                        borderRadius: 6,
+                        borderColor: '#16213e',
+                        borderWidth: 2
+                    },
+                    label: { show: false },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 14,
+                            fontWeight: 'bold',
+                            color: '#fff'
+                        }
+                    },
+                    data: pieData,
+                    color: ['#e94560', '#0f3460', '#533483', '#306998', '#4b8bbe', '#ffd43b', '#646464', '#2ecc71', '#e67e22', '#9b59b6']
+                }]
+            });
+
+            window.addEventListener('resize', function () { chart.resize(); });
+        }
+
+        function renderRecentLogs(logs) {
+            var tbody = document.getElementById('recentLogsBody');
+            if (!logs.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-tip">暂无日志数据</td></tr>';
+                return;
+            }
+            var html = '';
+            logs.forEach(function (log) {
+                html += '<tr>'
+                    + '<td>' + escapeHtml(log.gameName || '') + '</td>'
+                    + '<td>' + escapeHtml(log.player || '') + '</td>'
+                    + '<td>' + escapeHtml(log.action || '') + '</td>'
+                    + '<td>' + escapeHtml(log.playTime || '') + '</td>'
+                    + '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
