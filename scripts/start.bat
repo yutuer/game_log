@@ -43,7 +43,7 @@ echo  按 Ctrl+C 停止应用
 echo ==========================================
 echo.
 
-call mvn spring-boot:run -Dspring-boot.run.profiles=dev
+call mvn org.springframework.boot:spring-boot-maven-plugin:2.7.18:run -Dspring-boot.run.profiles=dev
 
 endlocal
 pause
