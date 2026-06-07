@@ -17,6 +17,10 @@
 - [x] ServletInitializer 配置正确，支持 WAR 包部署到外部 Tomcat
 - [x] start.sh 可编译打包并部署到 Tomcat
 - [x] stop.sh 可优雅关闭 Tomcat
+- [x] start.bat 可在 Windows 本地启动开发服务器
+- [x] stop.bat 可在 Windows 停止应用进程
+- [x] SpringBoot 版本降级到 2.7.18，兼容 Java 8
+- [x] JPA 注解使用 javax.persistence（非 jakarta.persistence）
 - [x] pom.xml 包含 spring-boot-devtools（scope: runtime, optional: true）
 - [x] application-dev.yml 配置 devtools.restart.enabled=true
 - [x] DevTools 依赖不参与生产环境打包

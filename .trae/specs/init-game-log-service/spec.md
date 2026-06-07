@@ -28,7 +28,7 @@
 
 * Affected code: 全新项目，无现有代码受影响
 
-* 技术栈: SpringBoot 3.x + JPA + MySQL + Maven + HikariCP + 异步写入 + Spring DevTools 热更新 + ECharts 可视化
+* 技术栈: SpringBoot 2.7.18 + JPA + MySQL + Maven + HikariCP + 异步写入 + Spring DevTools 热更新 + ECharts 可视化
 
 ***
 
@@ -36,7 +36,7 @@
 
 ### Requirement: 项目骨架
 
-系统 SHALL 基于 SpringBoot 3.x 创建 Maven 项目，打包方式为 WAR（支持外部 Tomcat 部署）。
+系统 SHALL 基于 SpringBoot 2.7.18（Java 8 兼容）创建 Maven 项目，打包方式为 WAR（支持外部 Tomcat 部署）。
 
 #### Scenario: 项目结构
 

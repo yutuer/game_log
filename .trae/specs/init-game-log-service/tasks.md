@@ -22,6 +22,13 @@
 - [x] Task 5: 创建部署脚本
   - [x] SubTask 5.1: 创建 start.sh（编译打包 + 部署到 Tomcat + 启动）
   - [x] SubTask 5.2: 创建 stop.sh（关闭 Tomcat）
+  - [x] SubTask 5.3: 创建 start.bat（Windows 本地开发启动，使用 mvn spring-boot:run）
+  - [x] SubTask 5.4: 创建 stop.bat（Windows 停止应用进程）
+
+- [x] Task 5.5: 降级 SpringBoot 版本（3.2.5 → 2.7.18，Java 17 → 1.8）
+  - [x] pom.xml 版本和 java.version 降级
+  - [x] jakarta.persistence.* → javax.persistence.*
+  - [x] start.bat 插件版本同步更新
 
 - [x] Task 6: 实现可视化控制台界面
   - [x] SubTask 6.1: 创建后端统计接口（/api/game-logs/stats：今日总数、7天趋势、游戏占比）
