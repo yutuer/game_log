@@ -9,14 +9,14 @@
     <Appenders>
         <!-- Console Appender -->
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] %logger{36} - %msg%n"/>
+            <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] %logger{36} - %msg%n"/>
         </Console>
 
         <!-- 数据日志 RollingFile Appender（按天滚动） -->
         <RollingFile name="DataLog"
                      fileName="${DATA_LOG_PATH}/game-log.json"
                      filePattern="${DATA_LOG_PATH}/game-log-%d{yyyy-MM-dd}.json">
-            <PatternLayout pattern="%m%n"/>
+            <PatternLayout charset="UTF-8" pattern="%m%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy />
             </Policies>
@@ -27,7 +27,7 @@
         <RollingFile name="GatewayLog"
                      fileName="${GATEWAY_LOG_PATH}/gateway.log"
                      filePattern="${GATEWAY_LOG_PATH}/gateway-%d{yyyy-MM-dd}.log">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level - %msg%n"/>
+            <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level - %msg%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy />
             </Policies>

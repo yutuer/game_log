@@ -4,6 +4,9 @@ REM ============================================================
 REM start.bat - 本地启动 game-log-service (Windows)
 REM ============================================================
 
+REM 强制 JVM 使用 UTF-8 编码（解决 Windows console 乱码问题）
+set "JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+
 set "PROJECT_DIR=%~dp0.."
 
 echo ==========================================

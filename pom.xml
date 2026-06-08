@@ -47,10 +47,10 @@
             <artifactId>log4j-core</artifactId>
             <version>${log4j2.version}</version>
         </dependency>
-        <!-- Log4j2 与 SLF4J 桥接 -->
+        <!-- Log4j2 与 SLF4J 2.x 桥接（Spring Boot 3.2 用的是 SLF4J 2.x） -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
             <version>${log4j2.version}</version>
         </dependency>
 
