@@ -4,7 +4,6 @@ import com.gamelog.config.AsyncConfig;
 import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -31,9 +30,18 @@ public class GameLogAsyncWriter {
      * 提交日志到异步队列，队列满时降级为同步写入
      */
     public boolean submit(GameLog gameLog) {
+        int currentSize = queue.size();
+        int capacity = queue.remainingCapacity();
+
+        // 压力告警日志
+        if (currentSize > 0 && currentSize % 500 == 0) {
+            log.warn("[PRESSURE] Queue backlog high: size={}, capacity={}, gameName={}",
+                    currentSize, capacity, gameLog.getGameName());
+        }
+
         boolean offered = queue.offer(gameLog);
         if (!offered) {
-            log.warn("异步队列已满，降级为同步写入: gameName={}", gameLog.getGameName());
+            log.error("[PRESSURE] Queue FULL! Falling back to sync write: gameName={}", gameLog.getGameName());
             gameLogRepository.save(gameLog);
             return false;
         }
@@ -96,16 +104,19 @@ public class GameLogAsyncWriter {
         }, "gamelog-flush");
         flushThread.setDaemon(true);
         flushThread.start();
-        log.info("异步写入刷新线程已启动: batchSize={}, flushIntervalMs={}",
-                asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs());
+        log.info("Async flush thread started: batchSize={}, flushInterval={}ms, queueCapacity={}",
+                asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs(), asyncConfig.getQueueCapacity());
     }
 
     private void flushBatch(List<GameLog> batch) {
+        long start = System.currentTimeMillis();
         try {
             gameLogRepository.saveAll(batch);
-            log.debug("批量写入日志: {}条", batch.size());
+            long cost = System.currentTimeMillis() - start;
+            log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}",
+                    batch.size(), cost, queue.size());
         } catch (Exception e) {
-            log.error("批量写入日志失败，尝试逐条写入: {}条", batch.size(), e);
+            log.error("[ASYNC-WRITE] Batch write failed, trying one by one: size={}", batch.size(), e);
             for (GameLog gameLog : batch) {
                 try {
                     gameLogRepository.save(gameLog);

@@ -32,6 +32,6 @@ echo  Press Ctrl+C to stop
 echo ==========================================
 echo.
 
-call mvn org.springframework.boot:spring-boot-maven-plugin:2.7.18:run -Dspring-boot.run.profiles=dev
+call mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
 pause
