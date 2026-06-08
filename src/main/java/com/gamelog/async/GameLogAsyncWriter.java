@@ -19,6 +19,7 @@ public class GameLogAsyncWriter {
 
     private final GameLogRepository gameLogRepository;
     private final AsyncConfig asyncConfig;
+    private final DataLogWriter dataLogWriter;
     private final BlockingQueue<GameLog> queue;
 
     // 监控计数器
@@ -26,17 +27,49 @@ public class GameLogAsyncWriter {
     private final AtomicLong totalWriteCount = new AtomicLong(0);
     private volatile long lastFlushTime = 0L;
 
-    public GameLogAsyncWriter(GameLogRepository gameLogRepository, AsyncConfig asyncConfig) {
+    public GameLogAsyncWriter(GameLogRepository gameLogRepository,
+                              AsyncConfig asyncConfig,
+                              DataLogWriter dataLogWriter) {
         this.gameLogRepository = gameLogRepository;
         this.asyncConfig = asyncConfig;
+        this.dataLogWriter = dataLogWriter;
         this.queue = new LinkedBlockingQueue<>(asyncConfig.getQueueCapacity());
         startFlushThread();
+        registerShutdownHook();
+    }
+
+    /**
+     * 注册关闭钩子，确保服务关闭时将队列中剩余数据写入日志文件
+     */
+    private void registerShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.info("[SHUTDOWN] 服务关闭中，准备刷新剩余数据...");
+            // 将队列中剩余的数据写入日志文件（作为备份）
+            List<GameLog> remaining = new ArrayList<>();
+            queue.drainTo(remaining);
+            if (!remaining.isEmpty()) {
+                log.info("[SHUTDOWN] 队列中还有 {} 条数据需要处理，写入日志文件备份", remaining.size());
+                dataLogWriter.logDataBatch(remaining);
+                // 尝试同步写入数据库
+                try {
+                    gameLogRepository.saveAll(remaining);
+                    log.info("[SHUTDOWN] 成功将 {} 条数据写入数据库", remaining.size());
+                } catch (Exception e) {
+                    log.error("[SHUTDOWN] 写入数据库失败，数据已保存在日志文件中", e);
+                }
+            }
+            log.info("[SHUTDOWN] 关闭钩子执行完成");
+        }, "gamelog-shutdown-hook"));
     }
 
     /**
      * 提交日志到异步队列，队列满时降级为同步写入
+     * 同时写入日志文件作为备份
      */
     public boolean submit(GameLog gameLog) {
+        // 先写入日志文件（数据备份），不阻塞主流程
+        dataLogWriter.logData(gameLog);
+
         int currentSize = queue.size();
         int capacity = queue.remainingCapacity();
 

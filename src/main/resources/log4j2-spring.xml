@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Properties>
+        <Property name="LOG_PATH">logs</Property>
+        <Property name="DATA_LOG_PATH">${LOG_PATH}/data</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- Console Appender -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] %logger{36} - %msg%n"/>
+        </Console>
+
+        <!-- 数据日志 RollingFile Appender（按天滚动） -->
+        <RollingFile name="DataLog"
+                     fileName="${DATA_LOG_PATH}/game-log.json"
+                     filePattern="${DATA_LOG_PATH}/game-log-%d{yyyy-MM-dd}.json">
+            <JsonTemplateLayout/>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+            <DefaultRolloverStrategy max="7"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- 数据日志 Logger（异步写入） -->
+        <Logger name="DataLogger" level="info" additivity="false">
+            <AppenderRef ref="DataLog"/>
+        </Logger>
+
+        <!-- 应用日志 -->
+        <Logger name="com.gamelog" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- Root Logger -->
+        <Root level="warn">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
