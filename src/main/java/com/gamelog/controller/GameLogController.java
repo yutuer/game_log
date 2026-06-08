@@ -74,8 +74,10 @@ public class GameLogController {
     }
 
     /**
-     * 统计数据
+     * 统计数据（聚合接口，已废弃，请使用独立接口）
+     * @deprecated 使用 /stats/today-count 等独立接口代替
      */
+    @Deprecated
     @GetMapping("/stats")
     public Result<GameLogStatsDTO> getStats() {
         return Result.success(gameLogService.getStats());
@@ -87,6 +89,57 @@ public class GameLogController {
     @GetMapping("/queue-status")
     public Result<QueueStatusDTO> getQueueStatus() {
         return Result.success(gameLogService.getQueueStatus());
+    }
+
+    // ==================== 独立统计接口（前端渐进式加载） ====================
+    // 排序原则：按页面展示顺序，耗时少的在前
+
+    /** 1. 今日日志总数 */
+    @GetMapping("/stats/today-count")
+    public Result<Long> getTodayCount() {
+        return Result.success(gameLogService.getTodayCount());
+    }
+
+    /** 2. 平均游戏时长 */
+    @GetMapping("/stats/average-duration")
+    public Result<Double> getAverageDuration() {
+        return Result.success(gameLogService.getAverageDuration());
+    }
+
+    /** 3. 近7天趋势 */
+    @GetMapping("/stats/trend")
+    public Result<List<java.util.Map<String, Object>>> getTrend() {
+        return Result.success(gameLogService.getTrend());
+    }
+
+    /** 4. 游戏分布占比 */
+    @GetMapping("/stats/game-distribution")
+    public Result<List<java.util.Map<String, Object>>> getGameDistribution() {
+        return Result.success(gameLogService.getGameDistribution());
+    }
+
+    /** 5. 最近日志（TOP 10） */
+    @GetMapping("/stats/recent-logs")
+    public Result<List<GameLog>> getRecentLogs() {
+        return Result.success(gameLogService.getRecentLogs());
+    }
+
+    /** 6. 玩家排行榜 Top 10 */
+    @GetMapping("/stats/player-leaderboard")
+    public Result<List<java.util.Map<String, Object>>> getPlayerLeaderboard() {
+        return Result.success(gameLogService.getPlayerLeaderboard());
+    }
+
+    /** 7. 操作类型分布 */
+    @GetMapping("/stats/action-distribution")
+    public Result<List<java.util.Map<String, Object>>> getActionDistribution() {
+        return Result.success(gameLogService.getActionDistribution());
+    }
+
+    /** 8. 24小时活跃热力图（查询最重） */
+    @GetMapping("/stats/hourly-activity")
+    public Result<List<java.util.Map<String, Object>>> getHourlyActivity() {
+        return Result.success(gameLogService.getHourlyActivity());
     }
 
     /**

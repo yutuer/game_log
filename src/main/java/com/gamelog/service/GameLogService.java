@@ -94,46 +94,104 @@ public class GameLogService {
     }
 
     /**
-     * 获取统计数据
-     * 缓存 30 秒，避免频繁查询数据库
+     * 获取统计数据（聚合接口，已废弃，请使用独立接口）
+     * 缓存 10 秒
+     * @deprecated 使用各独立接口代替，前端可并行请求
      */
-    @Cacheable(value = "gameLogStats", key = "'all'")
+    @Deprecated
+    @Cacheable(value = "stats", key = "'all'")
     public GameLogStatsDTO getStats() {
+        // 调用各独立方法组装数据
         GameLogStatsDTO stats = new GameLogStatsDTO();
+        stats.setTodayCount(getTodayCount());
+        stats.setTrend(getTrend());
+        stats.setGameDistribution(getGameDistribution());
+        stats.setRecentLogs(getRecentLogs());
+        stats.setPlayerLeaderboard(getPlayerLeaderboard());
+        stats.setHourlyActivity(getHourlyActivity());
+        stats.setActionDistribution(getActionDistribution());
+        stats.setAverageDuration(getAverageDuration());
+        return stats;
+    }
 
-        // 今日总数
+    // ==================== 独立统计接口（前端渐进式加载） ====================
+    // 排序原则：按页面展示顺序，耗时少的在前
+
+    /**
+     * 1. 今日日志总数（页面顶部，一眼可见）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'today-count'")
+    public long getTodayCount() {
         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
         LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
-        stats.setTodayCount(gameLogRepository.countByCreatedAtBetween(todayStart, todayEnd));
+        return gameLogRepository.countByCreatedAtBetween(todayStart, todayEnd);
+    }
 
-        // 近7天趋势
+    /**
+     * 2. 平均游戏时长（页面顶部，一眼可见）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'avg-duration'")
+    public double getAverageDuration() {
+        LocalDateTime thirtyDaysAgo = LocalDate.now().minusDays(29).atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
+        Double avg = gameLogRepository.findAverageDuration(thirtyDaysAgo, todayEnd);
+        return avg != null ? avg : 0.0;
+    }
+
+    /**
+     * 3. 近7天趋势（页面第4块）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'trend'")
+    public List<Map<String, Object>> getTrend() {
         LocalDateTime sevenDaysAgo = LocalDate.now().minusDays(6).atStartOfDay();
         List<Object[]> dateCounts = gameLogRepository.countByDateGroup(sevenDaysAgo);
-        List<Map<String, Object>> trend = dateCounts.stream().map(row -> {
+        return dateCounts.stream().map(row -> {
             Map<String, Object> item = new HashMap<>();
             item.put("date", row[0].toString());
             item.put("count", row[1]);
             return item;
         }).collect(Collectors.toList());
-        stats.setTrend(trend);
+    }
 
-        // 游戏占比（近30天）
+    /**
+     * 4. 游戏分布占比（页面第5块）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'game-dist'")
+    public List<Map<String, Object>> getGameDistribution() {
         LocalDateTime thirtyDaysAgo = LocalDate.now().minusDays(29).atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
         List<Object[]> gameCounts = gameLogRepository.countByGameNameGroup(thirtyDaysAgo, todayEnd);
-        List<Map<String, Object>> gameDistribution = gameCounts.stream().map(row -> {
+        return gameCounts.stream().map(row -> {
             Map<String, Object> item = new HashMap<>();
             item.put("gameName", row[0].toString());
             item.put("count", row[1]);
             return item;
         }).collect(Collectors.toList());
-        stats.setGameDistribution(gameDistribution);
+    }
 
-        // 最近日志
-        stats.setRecentLogs(gameLogRepository.findTop10ByOrderByCreatedAtDesc());
+    /**
+     * 5. 最近日志（页面第6块，TOP 10）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'recent-logs'")
+    public List<GameLog> getRecentLogs() {
+        return gameLogRepository.findTop10ByOrderByCreatedAtDesc();
+    }
 
-        // 玩家排行榜 Top 10
+    /**
+     * 6. 玩家排行榜 Top 10（页面第7块）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'leaderboard'")
+    public List<Map<String, Object>> getPlayerLeaderboard() {
+        LocalDateTime thirtyDaysAgo = LocalDate.now().minusDays(29).atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
         List<Object[]> playerStats = gameLogRepository.findPlayerStats(thirtyDaysAgo, todayEnd);
-        List<Map<String, Object>> playerLeaderboard = playerStats.stream()
+        return playerStats.stream()
                 .limit(10)
                 .map(row -> {
                     Map<String, Object> item = new HashMap<>();
@@ -141,11 +199,33 @@ public class GameLogService {
                     item.put("count", row[1]);
                     return item;
                 }).collect(Collectors.toList());
-        stats.setPlayerLeaderboard(playerLeaderboard);
+    }
 
-        // 24小时活跃时段分布（过去7天，按天×小时分组）
-        LocalDateTime sevenDaysAgoForHeatmap = LocalDate.now().minusDays(6).atStartOfDay();
-        List<Object[]> dailyHourlyStats = gameLogRepository.findDailyHourlyStats(sevenDaysAgoForHeatmap);
+    /**
+     * 7. 操作类型分布（页面第9块）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'action-dist'")
+    public List<Map<String, Object>> getActionDistribution() {
+        LocalDateTime thirtyDaysAgo = LocalDate.now().minusDays(29).atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
+        List<Object[]> actionStats = gameLogRepository.findActionStats(thirtyDaysAgo, todayEnd);
+        return actionStats.stream().map(row -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("action", row[0].toString());
+            item.put("count", row[1]);
+            return item;
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * 8. 24小时活跃热力图（页面第8块，查询最重，放最后）
+     * 缓存 10 秒
+     */
+    @Cacheable(value = "stats", key = "'hourly-activity'")
+    public List<Map<String, Object>> getHourlyActivity() {
+        LocalDateTime sevenDaysAgo = LocalDate.now().minusDays(6).atStartOfDay();
+        List<Object[]> dailyHourlyStats = gameLogRepository.findDailyHourlyStats(sevenDaysAgo);
         List<Map<String, Object>> hourlyActivity = new ArrayList<>();
         for (Object[] row : dailyHourlyStats) {
             Map<String, Object> item = new HashMap<>();
@@ -155,23 +235,7 @@ public class GameLogService {
             item.put("count", row[2]);
             hourlyActivity.add(item);
         }
-        stats.setHourlyActivity(hourlyActivity);
-
-        // 操作类型分布
-        List<Object[]> actionStats = gameLogRepository.findActionStats(thirtyDaysAgo, todayEnd);
-        List<Map<String, Object>> actionDistribution = actionStats.stream().map(row -> {
-            Map<String, Object> item = new HashMap<>();
-            item.put("action", row[0].toString());
-            item.put("count", row[1]);
-            return item;
-        }).collect(Collectors.toList());
-        stats.setActionDistribution(actionDistribution);
-
-        // 平均游戏时长
-        Double averageDuration = gameLogRepository.findAverageDuration(thirtyDaysAgo, todayEnd);
-        stats.setAverageDuration(averageDuration != null ? averageDuration : 0.0);
-
-        return stats;
+        return hourlyActivity;
     }
 
     /**

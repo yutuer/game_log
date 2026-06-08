@@ -445,6 +445,26 @@
         .gauge-wrapper .help-icon:hover .tooltip {
             display: block;
         }
+
+        /* 骨架屏 */
+        .skeleton {
+            background: linear-gradient(90deg, #1a1a2e 25%, #252547 50%, #1a1a2e 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+            border-radius: 4px;
+            display: inline-block;
+            color: transparent !important;
+        }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-block {
+            height: 20px;
+            margin: 8px 0;
+        }
     </style>
 </head>
 <body>
@@ -466,10 +486,10 @@
                 <!-- 概览统计 -->
                 <div class="overview-card" style="margin-bottom: 0; padding: 20px;">
                     <div class="label">今日日志总数</div>
-                    <div class="value" id="todayCount">--</div>
+                    <div class="value" id="todayCount"><span class="skeleton" style="width: 100px; height: 40px;">--</span></div>
                     <div style="margin-top: 12px;">
                         <span style="font-size: 13px; color: #aaa;">平均时长: </span>
-                        <span id="avg-duration" style="font-size: 16px; color: #4caf50;">--</span>
+                        <span id="avg-duration" style="font-size: 16px; color: #4caf50;"><span class="skeleton" style="width: 50px;">--</span></span>
                         <span style="font-size: 13px; color: #aaa;"> 分钟</span>
                     </div>
                     <button id="refreshBtn" onclick="loadStats()" style="margin-top: 12px;">刷新数据</button>
@@ -499,15 +519,15 @@
                 <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center; padding-left: 20px;">
                     <div class="monitor-stat">
                         <span class="stat-label">队列积压</span>
-                        <span class="stat-value" id="queue-size">-</span>
+                        <span class="stat-value" id="queue-size"><span class="skeleton" style="width: 60px;">-</span></span>
                     </div>
                     <div class="monitor-stat">
                         <span class="stat-label">总写入数</span>
-                        <span class="stat-value" id="total-write">-</span>
+                        <span class="stat-value" id="total-write"><span class="skeleton" style="width: 80px;">-</span></span>
                     </div>
                     <div class="monitor-stat">
                         <span class="stat-label">上次刷新</span>
-                        <span class="stat-value" id="last-flush">-</span>
+                        <span class="stat-value" id="last-flush"><span class="skeleton" style="width: 70px;">-</span></span>
                     </div>
                 </div>
             </div>
@@ -574,44 +594,101 @@
     </div>
 
     <script>
-        var statsInterval;
+        // 各组件独立加载（渐进式渲染）
+        // 加载顺序：按页面展示顺序 + 耗时多少（先快后慢）
 
-        // 页面加载时获取数据
+        // 跟踪每个组件的加载状态
+        var loadStatus = {
+            todayCount: false,
+            averageDuration: false,
+            queueStatus: false,
+            trend: false,
+            gameDistribution: false,
+            recentLogs: false,
+            leaderboard: false,
+            actionDistribution: false,
+            hourlyActivity: false
+        };
+        var totalLoaders = Object.keys(loadStatus).length;
+        var isLoading = false;
+
+        // 页面加载时启动各独立加载
         document.addEventListener('DOMContentLoaded', function () {
-            loadStats();
+            loadAll();
             // 30秒自动刷新
-            statsInterval = setInterval(loadStats, 30000);
+            setInterval(loadAll, 30000);
         });
 
-        // 页面卸载时清除定时器
-        window.addEventListener('beforeunload', function () {
-            if (statsInterval) {
-                clearInterval(statsInterval);
-            }
-        });
-
-        function loadStats() {
-            // 显示加载状态
+        // 并行加载所有组件（独立请求，独立渲染）
+        function loadAll() {
+            if (isLoading) return;
+            isLoading = true;
             showLoading();
 
-            // 使用 Promise.all 并行加载，减少等待时间
-            Promise.all([
-                fetchWithTimeout('/api/game-logs/stats', 10000),
-                fetchWithTimeout('/api/game-logs/queue-status', 5000)
-            ])
-                .then(function (results) {
-                    hideLoading();
-                    if (results[0] && results[0].code === 200 && results[0].data) {
-                        renderStats(results[0].data);
-                    }
-                    if (results[1] && results[1].code === 200 && results[1].data) {
-                        renderQueueStatus(results[1].data);
+            // 第一优先级：用户一眼就能看见的数据
+            fetchAndRender('/api/game-logs/stats/today-count', 3000, function (data) {
+                document.getElementById('todayCount').textContent = data != null ? data : 0;
+            });
+
+            fetchAndRender('/api/game-logs/stats/average-duration', 5000, function (data) {
+                document.getElementById('avg-duration').textContent =
+                    (data != null && data > 0 ? data.toFixed(1) : '--');
+            });
+
+            // 队列状态（内存读取，最快）
+            fetchAndRender('/api/game-logs/queue-status', 3000, function (data) {
+                if (data) renderQueueStatus(data);
+            });
+
+            // 7天趋势
+            fetchAndRender('/api/game-logs/stats/trend', 8000, function (data) {
+                renderTrendChart(data || []);
+            });
+
+            // 游戏分布
+            fetchAndRender('/api/game-logs/stats/game-distribution', 8000, function (data) {
+                renderPieChart(data || []);
+            });
+
+            // 最近日志（有索引，TOP 10）
+            fetchAndRender('/api/game-logs/stats/recent-logs', 5000, function (data) {
+                renderRecentLogs(data || []);
+            });
+
+            // 玩家排行
+            fetchAndRender('/api/game-logs/stats/player-leaderboard', 10000, function (data) {
+                renderLeaderboard(data || []);
+            });
+
+            // 操作分布
+            fetchAndRender('/api/game-logs/stats/action-distribution', 10000, function (data) {
+                renderActionChart(data || []);
+            });
+
+            // 热力图（查询最重，最后加载）
+            fetchAndRender('/api/game-logs/stats/hourly-activity', 15000, function (data) {
+                renderHourlyHeatmap(data || []);
+            });
+
+            // 给一段时间让所有请求响应，不卡住按钮
+            setTimeout(function () {
+                isLoading = false;
+                hideLoading();
+            }, 1500);
+        }
+
+        // 独立 fetch 并渲染（不阻塞其他组件）
+        function fetchAndRender(url, timeout, renderFn) {
+            fetchWithTimeout(url, timeout)
+                .then(function (json) {
+                    if (json && json.code === 200) {
+                        renderFn(json.data);
+                    } else {
+                        console.warn('数据异常:', url, json);
                     }
                 })
                 .catch(function (err) {
-                    hideLoading();
-                    console.error('加载数据失败:', err);
-                    showError('数据加载失败，请稍后重试');
+                    console.warn('加载失败:', url, err.message);
                 });
         }
 
@@ -668,7 +745,7 @@
 
             // 平均游戏时长
             var avgDuration = data.averageDuration;
-            document.getElementById('avg-duration').textContent = 
+            document.getElementById('avg-duration').textContent =
                 (avgDuration != null && avgDuration > 0 ? avgDuration.toFixed(1) : '--');
 
             // 趋势图
