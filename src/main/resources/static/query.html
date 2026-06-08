@@ -239,6 +239,48 @@
             font-weight: 600;
         }
 
+        /* 快捷时间选择 */
+        .quick-range-select {
+            background-color: #1a1a2e;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            min-width: 120px;
+        }
+
+        .quick-range-select:focus {
+            border-color: #e94560;
+        }
+
+        /* 导出按钮 */
+        .btn-export {
+            background-color: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 24px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            height: 38px;
+            white-space: nowrap;
+            margin-left: 10px;
+        }
+
+        .btn-export:hover {
+            background-color: #f57c00;
+        }
+
+        .filter-actions {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
         /* 响应式 */
         @media (max-width: 768px) {
             .filter-group {
@@ -278,6 +320,15 @@
                     <input type="text" id="player" placeholder="输入玩家名称">
                 </div>
                 <div class="filter-group">
+                    <label for="quickRange">时间范围</label>
+                    <select id="quickRange" class="quick-range-select" onchange="setQuickRange()">
+                        <option value="">自定义</option>
+                        <option value="today">今日</option>
+                        <option value="week">近7天</option>
+                        <option value="month">近30天</option>
+                    </select>
+                </div>
+                <div class="filter-group">
                     <label for="startTime">开始时间</label>
                     <input type="datetime-local" id="startTime">
                 </div>
@@ -285,7 +336,10 @@
                     <label for="endTime">结束时间</label>
                     <input type="datetime-local" id="endTime">
                 </div>
-                <button class="btn-query" onclick="searchLogs()">查询</button>
+                <div class="filter-actions">
+                    <button class="btn-query" onclick="searchLogs()">查询</button>
+                    <button class="btn-export" onclick="exportCsv()">导出CSV</button>
+                </div>
             </div>
         </div>
 
@@ -421,6 +475,46 @@
 
         function escapeAttr(str) {
             return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function setQuickRange() {
+            var range = document.getElementById('quickRange').value;
+            if (!range) return;
+
+            var now = new Date();
+            var end = now.toISOString().slice(0, 16);
+            var start;
+
+            if (range === 'today') {
+                start = new Date(now.setHours(0, 0, 0, 0)).toISOString().slice(0, 16);
+            } else if (range === 'week') {
+                start = new Date();
+                start.setDate(start.getDate() - 7);
+                start = start.toISOString().slice(0, 16);
+            } else if (range === 'month') {
+                start = new Date();
+                start.setDate(start.getDate() - 30);
+                start = start.toISOString().slice(0, 16);
+            }
+
+            document.getElementById('startTime').value = start;
+            document.getElementById('endTime').value = end;
+        }
+
+        function exportCsv() {
+            var gameName = document.getElementById('gameName').value.trim();
+            var player = document.getElementById('player').value.trim();
+            var startTime = document.getElementById('startTime').value;
+            var endTime = document.getElementById('endTime').value;
+
+            var params = [];
+            if (gameName) params.push('gameName=' + encodeURIComponent(gameName));
+            if (player) params.push('player=' + encodeURIComponent(player));
+            if (startTime) params.push('startTime=' + encodeURIComponent(startTime.replace('T', ' ')));
+            if (endTime) params.push('endTime=' + encodeURIComponent(endTime.replace('T', ' ')));
+
+            var queryString = params.length ? '?' + params.join('&') : '';
+            window.location.href = '/api/game-logs/export' + queryString;
         }
     </script>
 </body>

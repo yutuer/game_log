@@ -10,4 +10,5 @@ public class GameLogCreateDTO {
     private String action;
     private String detail;
     private LocalDateTime playTime;
+    private Integer duration;
 }

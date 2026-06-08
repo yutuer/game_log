@@ -35,6 +35,7 @@ public class GameLogService {
         gameLog.setAction(dto.getAction());
         gameLog.setDetail(dto.getDetail());
         gameLog.setPlayTime(dto.getPlayTime());
+        gameLog.setDuration(dto.getDuration());
         return gameLogAsyncWriter.submit(gameLog);
     }
 
@@ -49,6 +50,7 @@ public class GameLogService {
             gameLog.setAction(item.getAction());
             gameLog.setDetail(item.getDetail());
             gameLog.setPlayTime(item.getPlayTime());
+            gameLog.setDuration(item.getDuration());
             return gameLog;
         }).collect(Collectors.toList());
         return gameLogAsyncWriter.submitBatch(gameLogs);
@@ -126,6 +128,49 @@ public class GameLogService {
         // 最近日志
         stats.setRecentLogs(gameLogRepository.findTop10ByOrderByCreatedAtDesc());
 
+        // 玩家排行榜 Top 10
+        List<Object[]> playerStats = gameLogRepository.findPlayerStats(thirtyDaysAgo, todayEnd);
+        List<Map<String, Object>> playerLeaderboard = playerStats.stream()
+                .limit(10)
+                .map(row -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("player", row[0].toString());
+                    item.put("count", row[1]);
+                    return item;
+                }).collect(Collectors.toList());
+        stats.setPlayerLeaderboard(playerLeaderboard);
+
+        // 24小时活跃时段分布
+        List<Object[]> hourlyStats = gameLogRepository.findHourlyStats(thirtyDaysAgo, todayEnd);
+        List<Map<String, Object>> hourlyActivity = hourlyStats.stream().map(row -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("hour", row[0]);
+            item.put("count", row[1]);
+            return item;
+        }).collect(Collectors.toList());
+        stats.setHourlyActivity(hourlyActivity);
+
+        // 操作类型分布
+        List<Object[]> actionStats = gameLogRepository.findActionStats(thirtyDaysAgo, todayEnd);
+        List<Map<String, Object>> actionDistribution = actionStats.stream().map(row -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("action", row[0].toString());
+            item.put("count", row[1]);
+            return item;
+        }).collect(Collectors.toList());
+        stats.setActionDistribution(actionDistribution);
+
+        // 平均游戏时长
+        Double averageDuration = gameLogRepository.findAverageDuration(thirtyDaysAgo, todayEnd);
+        stats.setAverageDuration(averageDuration != null ? averageDuration : 0.0);
+
         return stats;
+    }
+
+    /**
+     * 获取队列状态（运维监控）
+     */
+    public QueueStatusDTO getQueueStatus() {
+        return gameLogAsyncWriter.getQueueStatus();
     }
 }

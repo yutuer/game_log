@@ -33,6 +33,9 @@ public class GameLog {
     @Column(nullable = false)
     private LocalDateTime playTime;
 
+    @Column(nullable = true)
+    private Integer duration;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

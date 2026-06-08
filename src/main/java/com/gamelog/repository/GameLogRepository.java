@@ -45,4 +45,24 @@ public interface GameLogRepository extends JpaRepository<GameLog, Long> {
 
     // 最近日志
     List<GameLog> findTop10ByOrderByCreatedAtDesc();
+
+    // 玩家排行榜：按玩家分组统计日志数量，降序排列
+    @Query("SELECT g.player, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.player ORDER BY cnt DESC")
+    List<Object[]> findPlayerStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // 时段热力图：按小时聚合统计活跃时段（24小时分布）
+    @Query(value = "SELECT HOUR(created_at) as hour, COUNT(*) as cnt FROM game_log WHERE created_at BETWEEN :start AND :end GROUP BY HOUR(created_at) ORDER BY hour", nativeQuery = true)
+    List<Object[]> findHourlyStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // 操作类型分布：按action分组统计
+    @Query("SELECT g.action, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.action ORDER BY cnt DESC")
+    List<Object[]> findActionStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // 游戏时长统计：计算平均游戏时长
+    @Query("SELECT AVG(g.duration) FROM GameLog g WHERE g.duration IS NOT NULL AND g.createdAt BETWEEN :start AND :end")
+    Double findAverageDuration(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // 总写入次数（用于监控）
+    @Query("SELECT COUNT(g) FROM GameLog g")
+    long countTotal();
 }

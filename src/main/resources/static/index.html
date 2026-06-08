@@ -183,6 +183,117 @@
             color: #666;
             font-size: 14px;
         }
+
+        /* 增强功能样式 */
+        .dashboard-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+        }
+
+        .dashboard-section h3 {
+            color: #e0e0e0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .monitor-section {
+            background: #252526;
+            border-left: 4px solid #4caf50;
+        }
+
+        .monitor-info p {
+            color: #b0b0b0;
+            margin: 5px 0;
+        }
+
+        .monitor-info span {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        #refreshBtn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        #refreshBtn:hover {
+            background: #388e3c;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table thead th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 13px;
+            color: #aaa;
+            border-bottom: 1px solid #0f3460;
+            font-weight: 500;
+        }
+
+        .data-table tbody td {
+            padding: 10px 14px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+            color: #ddd;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: rgba(233, 69, 96, 0.05);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .additional-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-card .label {
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 6px;
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #e94560;
+        }
     </style>
 </head>
 <body>
@@ -197,10 +308,21 @@
 
     <!-- 主内容 -->
     <div class="main-content">
-        <!-- 今日日志总数 -->
-        <div class="overview-card">
-            <div class="label">今日日志总数</div>
-            <div class="value" id="todayCount">--</div>
+        <!-- 今日日志总数 + 刷新按钮 -->
+        <div class="overview-card" style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <div class="label">今日日志总数</div>
+                <div class="value" id="todayCount">--</div>
+            </div>
+            <button id="refreshBtn" onclick="loadStats()">刷新数据</button>
+        </div>
+
+        <!-- 增强统计卡片 -->
+        <div class="additional-stats">
+            <div class="stat-card">
+                <div class="label">平均游戏时长</div>
+                <div class="value" id="avg-duration">--</div>
+            </div>
         </div>
 
         <!-- 图表行 -->
@@ -232,15 +354,66 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- 玩家排行榜 -->
+        <div class="dashboard-section">
+            <h3>玩家活跃排行 (Top 10)</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>玩家</th>
+                        <th>日志数</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <tr><td colspan="3" class="loading">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 图表区域 -->
+        <div class="charts-grid">
+            <div class="dashboard-section">
+                <h3>24小时活跃分布</h3>
+                <div id="hourly-chart" class="chart-container" style="height: 250px;"></div>
+            </div>
+            <div class="dashboard-section">
+                <h3>操作类型分布</h3>
+                <div id="action-chart" class="chart-container" style="height: 250px;"></div>
+            </div>
+        </div>
+
+        <!-- 队列状态监控 -->
+        <div class="dashboard-section monitor-section">
+            <h3>异步写入监控</h3>
+            <div class="monitor-info">
+                <p>队列积压: <span id="queue-size">-</span></p>
+                <p>总写入: <span id="total-write">-</span></p>
+                <p>上次刷新: <span id="last-flush">-</span></p>
+            </div>
+        </div>
     </div>
 
     <script>
+        var statsInterval;
+
         // 页面加载时获取数据
         document.addEventListener('DOMContentLoaded', function () {
-            fetchStats();
+            loadStats();
+            // 30秒自动刷新
+            statsInterval = setInterval(loadStats, 30000);
         });
 
-        function fetchStats() {
+        // 页面卸载时清除定时器
+        window.addEventListener('beforeunload', function () {
+            if (statsInterval) {
+                clearInterval(statsInterval);
+            }
+        });
+
+        function loadStats() {
+            // 加载统计数据
             fetch('/api/game-logs/stats')
                 .then(function (res) { return res.json(); })
                 .then(function (json) {
@@ -251,11 +424,28 @@
                 .catch(function (err) {
                     console.error('获取统计数据失败:', err);
                 });
+
+            // 加载队列状态
+            fetch('/api/game-logs/queue-status')
+                .then(function (res) { return res.json(); })
+                .then(function (json) {
+                    if (json.code === 200 && json.data) {
+                        renderQueueStatus(json.data);
+                    }
+                })
+                .catch(function (err) {
+                    console.error('获取队列状态失败:', err);
+                });
         }
 
         function renderStats(data) {
             // 今日日志总数
             document.getElementById('todayCount').textContent = data.todayCount != null ? data.todayCount : 0;
+
+            // 平均游戏时长
+            var avgDuration = data.averageDuration;
+            document.getElementById('avg-duration').textContent = 
+                (avgDuration != null && avgDuration > 0 ? avgDuration.toFixed(1) : '--') + ' 分钟';
 
             // 趋势图
             renderTrendChart(data.trend || []);
@@ -265,6 +455,110 @@
 
             // 最近日志
             renderRecentLogs(data.recentLogs || []);
+
+            // 玩家排行榜
+            renderLeaderboard(data.playerLeaderboard || []);
+
+            // 24小时活跃分布
+            renderHourlyChart(data.hourlyActivity || []);
+
+            // 操作类型分布
+            renderActionChart(data.actionDistribution || []);
+        }
+
+        function renderQueueStatus(data) {
+            document.getElementById('queue-size').textContent = data.queueSize != null ? data.queueSize : '-';
+            document.getElementById('total-write').textContent = data.totalWriteCount != null ? data.totalWriteCount : '-';
+            var lastFlush = data.lastFlushTime;
+            document.getElementById('last-flush').textContent = 
+                lastFlush ? new Date(lastFlush).toLocaleTimeString() : '-';
+        }
+
+        function renderLeaderboard(players) {
+            var tbody = document.getElementById('leaderboard-body');
+            if (!players.length) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-tip">暂无数据</td></tr>';
+                return;
+            }
+            var html = '';
+            players.forEach(function (p, i) {
+                html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(p.player || '') + '</td><td>' + p.count + '</td></tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function renderHourlyChart(hourlyData) {
+            var chart = echarts.init(document.getElementById('hourly-chart'));
+            var hours = [];
+            var counts = [];
+            for (var h = 0; h < 24; h++) {
+                hours.push(h + ':00');
+                var found = null;
+                for (var i = 0; i < hourlyData.length; i++) {
+                    if (parseInt(hourlyData[i].hour) === h) {
+                        found = hourlyData[i].count;
+                        break;
+                    }
+                }
+                counts.push(found || 0);
+            }
+
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: hours,
+                    axisLine: { lineStyle: { color: '#0f3460' } },
+                    axisLabel: { color: '#aaa', interval: 2 }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#0f3460' } },
+                    axisLabel: { color: '#aaa' },
+                    splitLine: { lineStyle: { color: 'rgba(15,52,96,0.5)' } }
+                },
+                series: [{
+                    data: counts,
+                    type: 'bar',
+                    itemStyle: { color: '#5470c6' }
+                }]
+            });
+
+            window.addEventListener('resize', function () { chart.resize(); });
+        }
+
+        function renderActionChart(actionData) {
+            var chart = echarts.init(document.getElementById('action-chart'));
+            var pieData = actionData.map(function (item) {
+                return { name: item.action || '未知', value: item.count || 0 };
+            });
+
+            chart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                legend: {
+                    orient: 'vertical',
+                    right: '5%',
+                    top: 'center',
+                    textStyle: { color: '#aaa' }
+                },
+                series: [{
+                    type: 'pie',
+                    radius: '60%',
+                    center: ['40%', '50%'],
+                    data: pieData,
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0,0,0,0.5)'
+                        }
+                    },
+                    color: ['#e94560', '#0f3460', '#533483', '#306998', '#4b8bbe', '#ffd43b', '#646464', '#2ecc71', '#e67e22', '#9b59b6']
+                }]
+            });
+
+            window.addEventListener('resize', function () { chart.resize(); });
         }
 
         function renderTrendChart(trend) {

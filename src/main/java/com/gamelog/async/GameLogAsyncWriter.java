@@ -1,6 +1,7 @@
 package com.gamelog.async;
 
 import com.gamelog.config.AsyncConfig;
+import com.gamelog.dto.QueueStatusDTO;
 import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Component
@@ -18,6 +20,11 @@ public class GameLogAsyncWriter {
     private final GameLogRepository gameLogRepository;
     private final AsyncConfig asyncConfig;
     private final BlockingQueue<GameLog> queue;
+
+    // 监控计数器
+    private final AtomicLong batchWriteCount = new AtomicLong(0);
+    private final AtomicLong totalWriteCount = new AtomicLong(0);
+    private volatile long lastFlushTime = 0L;
 
     public GameLogAsyncWriter(GameLogRepository gameLogRepository, AsyncConfig asyncConfig) {
         this.gameLogRepository = gameLogRepository;
@@ -110,8 +117,11 @@ public class GameLogAsyncWriter {
 
     private void flushBatch(List<GameLog> batch) {
         long start = System.currentTimeMillis();
+        totalWriteCount.addAndGet(batch.size());
         try {
             gameLogRepository.saveAll(batch);
+            batchWriteCount.incrementAndGet();
+            lastFlushTime = System.currentTimeMillis();
             long cost = System.currentTimeMillis() - start;
             log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}",
                     batch.size(), cost, queue.size());
@@ -125,5 +135,16 @@ public class GameLogAsyncWriter {
                 }
             }
         }
+    }
+
+    /**
+     * 获取队列状态监控信息
+     */
+    public QueueStatusDTO getQueueStatus() {
+        return new QueueStatusDTO(
+                queue.size(),
+                totalWriteCount.get(),
+                lastFlushTime > 0 ? lastFlushTime : null
+        );
     }
 }
