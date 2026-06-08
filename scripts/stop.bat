@@ -8,33 +8,23 @@ echo ==========================================
 echo  Stopping game-log-service (Windows)
 echo ==========================================
 
-echo Finding process...
+REM Use actuator shutdown endpoint for graceful shutdown
+echo Sending shutdown request to actuator...
 
-for /f "tokens=1,5" %%a in ('jps -l 2^>nul ^| findstr /i "GameLogApplication game-log-service"') do (
-    set "PID=%%a"
-    set "CLASS=%%b"
-)
-
-if not defined PID (
-    echo Process not found
-    echo If started via mvn spring-boot:run, press Ctrl+C in the running window
-    pause
-    exit /b 0
-)
-
-echo Found: PID=%PID%  Class=%CLASS%
-echo Stopping PID=%PID%...
-
-taskkill /PID %PID% /F >nul 2>&1
-
+curl -X POST http://localhost:8080/actuator/shutdown -s -o nul
 if %ERRORLEVEL% equ 0 (
-    echo Process stopped
+    echo Shutdown request sent successfully
+    echo Waiting for process to stop...
+    timeout /t 5 /nobreak >nul
 ) else (
-    echo Warning: Failed to stop process, please stop manually in Task Manager
+    echo Actuator shutdown failed, trying to kill process...
+    for /f "tokens=1" %%a in ('jps -l 2^>nul ^| findstr /i "GameLogApplication gamelog"') do (
+        echo Stopping PID=%%a...
+        taskkill /PID %%a /F >nul 2>&1
+    )
 )
 
 echo.
 echo ==========================================
 echo  Done
 echo ==========================================
-pause

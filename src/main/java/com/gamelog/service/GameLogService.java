@@ -140,14 +140,18 @@ public class GameLogService {
                 }).collect(Collectors.toList());
         stats.setPlayerLeaderboard(playerLeaderboard);
 
-        // 24小时活跃时段分布
-        List<Object[]> hourlyStats = gameLogRepository.findHourlyStats(thirtyDaysAgo, todayEnd);
-        List<Map<String, Object>> hourlyActivity = hourlyStats.stream().map(row -> {
+        // 24小时活跃时段分布（过去7天，按天×小时分组）
+        LocalDateTime sevenDaysAgoForHeatmap = LocalDate.now().minusDays(6).atStartOfDay();
+        List<Object[]> dailyHourlyStats = gameLogRepository.findDailyHourlyStats(sevenDaysAgoForHeatmap);
+        List<Map<String, Object>> hourlyActivity = new ArrayList<>();
+        for (Object[] row : dailyHourlyStats) {
             Map<String, Object> item = new HashMap<>();
-            item.put("hour", row[0]);
-            item.put("count", row[1]);
-            return item;
-        }).collect(Collectors.toList());
+            // DATE 返回的是 java.sql.Date，转为字符串
+            item.put("date", row[0].toString());
+            item.put("hour", row[1]);
+            item.put("count", row[2]);
+            hourlyActivity.add(item);
+        }
         stats.setHourlyActivity(hourlyActivity);
 
         // 操作类型分布

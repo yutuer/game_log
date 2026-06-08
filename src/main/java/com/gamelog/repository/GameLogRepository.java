@@ -50,9 +50,9 @@ public interface GameLogRepository extends JpaRepository<GameLog, Long> {
     @Query("SELECT g.player, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.player ORDER BY cnt DESC")
     List<Object[]> findPlayerStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
-    // 时段热力图：按小时聚合统计活跃时段（24小时分布）
-    @Query(value = "SELECT HOUR(created_at) as hour, COUNT(*) as cnt FROM game_log WHERE created_at BETWEEN :start AND :end GROUP BY HOUR(created_at) ORDER BY hour", nativeQuery = true)
-    List<Object[]> findHourlyStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    // 时段热力图：按天和小时分组统计（返回过去7天数据）
+    @Query(value = "SELECT DATE(created_at) as day, HOUR(created_at) as hour, COUNT(*) as cnt FROM game_log WHERE created_at >= :start GROUP BY DATE(created_at), HOUR(created_at) ORDER BY day, hour", nativeQuery = true)
+    List<Object[]> findDailyHourlyStats(@Param("start") LocalDateTime start);
 
     // 操作类型分布：按action分组统计
     @Query("SELECT g.action, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.action ORDER BY cnt DESC")

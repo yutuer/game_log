@@ -33,3 +33,13 @@ async:
     queue-capacity: ${ASYNC_QUEUE_CAPACITY:10000}
     batch-size: ${ASYNC_BATCH_SIZE:100}
     flush-interval-ms: ${ASYNC_FLUSH_INTERVAL_MS:1000}
+
+# Actuator 配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown
+  endpoint:
+    shutdown:
+      enabled: true
