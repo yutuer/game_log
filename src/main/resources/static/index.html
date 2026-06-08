@@ -376,7 +376,7 @@
                     + '<td>' + escapeHtml(log.gameName || '') + '</td>'
                     + '<td>' + escapeHtml(log.player || '') + '</td>'
                     + '<td>' + escapeHtml(log.action || '') + '</td>'
-                    + '<td>' + escapeHtml(log.playTime || '') + '</td>'
+                    + '<td>' + escapeHtml((log.playTime || '').replace('T', ' ')) + '</td>'
                     + '</tr>';
             });
             tbody.innerHTML = html;
