@@ -294,6 +294,156 @@
             font-weight: 700;
             color: #e94560;
         }
+
+        .gauge-section h3 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gauge-section .help-icon {
+            font-size: 14px;
+            color: #666;
+            cursor: help;
+            position: relative;
+        }
+
+        .gauge-section .help-icon:hover {
+            color: #e94560;
+        }
+
+        .gauge-section .tooltip {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 12px;
+            color: #aaa;
+            width: 220px;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            line-height: 1.6;
+        }
+
+        .gauge-section .help-icon:hover .tooltip {
+            display: block;
+        }
+
+        /* 系统监控面板 */
+        .monitor-panel {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .monitor-panel h3 {
+            color: #e0e0e0;
+            margin-bottom: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .monitor-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .monitor-gauges {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .monitor-stat {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #1a1a2e;
+            border-radius: 8px;
+        }
+
+        .monitor-stat .stat-label {
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .monitor-stat .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #4caf50;
+        }
+
+        .monitor-stat .stat-value.warning {
+            color: #ff9800;
+        }
+
+        .monitor-stat .stat-value.danger {
+            color: #f44336;
+        }
+
+        .gauge-wrapper {
+            text-align: center;
+        }
+
+        .gauge-wrapper h4 {
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .gauge-wrapper .help-icon {
+            font-size: 12px;
+            color: #666;
+            cursor: help;
+            position: relative;
+        }
+
+        .gauge-wrapper .help-icon:hover {
+            color: #e94560;
+        }
+
+        .gauge-wrapper .tooltip {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 11px;
+            color: #aaa;
+            width: 180px;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            line-height: 1.5;
+        }
+
+        .gauge-wrapper .help-icon:hover .tooltip {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -308,20 +458,57 @@
 
     <!-- 主内容 -->
     <div class="main-content">
-        <!-- 今日日志总数 + 刷新按钮 -->
-        <div class="overview-card" style="display: flex; align-items: center; justify-content: space-between;">
-            <div>
-                <div class="label">今日日志总数</div>
-                <div class="value" id="todayCount">--</div>
-            </div>
-            <button id="refreshBtn" onclick="loadStats()">刷新数据</button>
-        </div>
+        <!-- 概览 + 系统监控 -->
+        <div class="monitor-panel">
+            <h3>📊 系统监控</h3>
+            <div class="monitor-grid">
+                <!-- 概览统计 -->
+                <div class="overview-card" style="margin-bottom: 0; padding: 20px;">
+                    <div class="label">今日日志总数</div>
+                    <div class="value" id="todayCount">--</div>
+                    <div style="margin-top: 12px;">
+                        <span style="font-size: 13px; color: #aaa;">平均时长: </span>
+                        <span id="avg-duration" style="font-size: 16px; color: #4caf50;">--</span>
+                        <span style="font-size: 13px; color: #aaa;"> 分钟</span>
+                    </div>
+                    <button id="refreshBtn" onclick="loadStats()" style="margin-top: 12px;">刷新数据</button>
+                </div>
 
-        <!-- 增强统计卡片 -->
-        <div class="additional-stats">
-            <div class="stat-card">
-                <div class="label">平均游戏时长</div>
-                <div class="value" id="avg-duration">--</div>
+                <!-- 仪表盘 -->
+                <div class="monitor-gauges">
+                    <div class="gauge-wrapper">
+                        <h4>队列使用率
+                            <span class="help-icon">?
+                                <span class="tooltip">当前队列积压量占最大容量的比例。<br>50%以下为正常，80%以上需关注。</span>
+                            </span>
+                        </h4>
+                        <div id="queue-gauge" style="height: 160px;"></div>
+                    </div>
+                    <div class="gauge-wrapper">
+                        <h4>写入效率
+                            <span class="help-icon">?
+                                <span class="tooltip">消费速度与理想速度的比值。<br>接近100% = 消费跟得上<br>接近0% = 队列在积压</span>
+                            </span>
+                        </h4>
+                        <div id="write-gauge" style="height: 160px;"></div>
+                    </div>
+                </div>
+
+                <!-- 实时状态 -->
+                <div style="display: flex; flex-direction: column; gap: 8px; justify-content: center;">
+                    <div class="monitor-stat">
+                        <span class="stat-label">队列积压</span>
+                        <span class="stat-value" id="queue-size">-</span>
+                    </div>
+                    <div class="monitor-stat">
+                        <span class="stat-label">总写入数</span>
+                        <span class="stat-value" id="total-write">-</span>
+                    </div>
+                    <div class="monitor-stat">
+                        <span class="stat-label">上次刷新</span>
+                        <span class="stat-value" id="last-flush">-</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -383,28 +570,6 @@
                 <div id="action-chart" class="chart-container" style="height: 250px;"></div>
             </div>
         </div>
-
-        <!-- 仪表盘区域 -->
-        <div class="charts-grid">
-            <div class="dashboard-section gauge-section">
-                <h3>队列使用率</h3>
-                <div id="queue-gauge" class="chart-container" style="height: 200px;"></div>
-            </div>
-            <div class="dashboard-section gauge-section">
-                <h3>写入效率</h3>
-                <div id="write-gauge" class="chart-container" style="height: 200px;"></div>
-            </div>
-        </div>
-
-        <!-- 队列状态监控 -->
-        <div class="dashboard-section monitor-section">
-            <h3>异步写入监控</h3>
-            <div class="monitor-info">
-                <p>队列积压: <span id="queue-size">-</span></p>
-                <p>总写入: <span id="total-write">-</span></p>
-                <p>上次刷新: <span id="last-flush">-</span></p>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -457,7 +622,7 @@
             // 平均游戏时长
             var avgDuration = data.averageDuration;
             document.getElementById('avg-duration').textContent = 
-                (avgDuration != null && avgDuration > 0 ? avgDuration.toFixed(1) : '--') + ' 分钟';
+                (avgDuration != null && avgDuration > 0 ? avgDuration.toFixed(1) : '--');
 
             // 趋势图
             renderTrendChart(data.trend || []);
@@ -590,7 +755,8 @@
                 if (timeDelta > 0) {
                     var consumeRate = queueDelta / timeDelta;
                     var idealRate = 200 * 4 / 0.5;
-                   var efficiency = Math.min(100, Math.round((consumeRate / idealRate) * 100));
+                    // 限制效率范围为 0-100%，负数说明队列在积压，消费能力不足
+                    efficiency = Math.max(0, Math.min(100, Math.round((consumeRate / idealRate) * 100)));
                 }
             }
 

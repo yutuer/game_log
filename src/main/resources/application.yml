@@ -47,3 +47,14 @@ management:
   endpoint:
     shutdown:
       enabled: true
+
+# 日志配置
+logging:
+  level:
+    root: WARN
+    org.hibernate: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    org.hibernate.type: WARN
+    org.hibernate.jdbc: WARN
+    com.gamelog: INFO

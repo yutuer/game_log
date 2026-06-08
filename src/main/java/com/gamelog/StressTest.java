@@ -27,8 +27,8 @@ public class StressTest {
     private static final int PLAYERS_PER_SERVER = 200;    // 每服玩家数
     private static final int LOGS_PER_PLAYER = 10;       // 每5秒每人发送日志数
     private static final int INTERVAL_MS = 5000;        // 发送间隔（毫秒）
-    private static final long TEST_DURATION_MINUTES = 5L;    // 测试持续时间（分钟）
-
+    private static final long TEST_DURATION_MINUTES = 12L * 5;    // 测试持续时间（分钟）
+    
     private static final AtomicLong totalRequests = new AtomicLong(0);
     private static final AtomicLong successCount = new AtomicLong(0);
     private static final AtomicLong failCount = new AtomicLong(0);
