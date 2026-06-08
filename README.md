@@ -302,13 +302,63 @@ scripts\start.bat
 ```
 使用 SpringBoot 内嵌 Tomcat 启动，启用 dev profile（热更新）。
 
-### Linux 阿里云部署
+### Linux 阿里云部署（Tomcat）
 ```bash
 chmod +x scripts/*.sh
 ./scripts/start.sh
 ```
-编译 WAR 包部署到外部 Tomcat。
+脚本自动完成：编译打包 → 停止旧 Tomcat → 部署 WAR 包 → 启动 Tomcat。
 
 ### 停止服务
 - Windows：`scripts\stop.bat` 或在启动窗口按 Ctrl+C
 - Linux：`./scripts/stop.sh`
+
+---
+
+## Tomcat 部署指南
+
+### 前提条件
+- JDK 17+
+- Tomcat 9.x 或 10.x（支持 Jakarta EE）
+- MySQL 数据库
+
+### 部署步骤
+
+**1. 打包 WAR 文件**
+```bash
+mvn clean package -DskipTests
+```
+生成的 WAR 包位于 `target/game-log-service.war`
+
+**2. 配置 MySQL**
+确保 MySQL 中已创建 `game_log` 数据库：
+```sql
+CREATE DATABASE IF NOT EXISTS game_log CHARACTER SET utf8mb4;
+```
+
+**3. 配置 application.yml**
+修改生产环境配置，添加 MySQL 服务器地址：
+```bash
+# 在启动前设置环境变量
+export MYSQL_URL="jdbc:mysql://你的阿里云IP:3306/game_log"
+export MYSQL_USERNAME="你的用户名"
+export MYSQL_PASSWORD="你的密码"
+```
+
+**4. 部署到 Tomcat**
+- 将 `target/game-log-service.war` 上传到服务器
+- 复制到 Tomcat 的 `webapps/` 目录
+- Tomcat 会自动解压并启动
+
+**5. 访问应用**
+- 内嵌 Tomcat 模式：`http://服务器IP:8080/`
+- Tomcat 部署模式：`http://服务器IP:8080/game-log-service/`
+
+### 脚本说明
+
+| 脚本 | 用途 |
+|------|------|
+| start.sh | Linux 部署脚本：编译 → 停止旧 Tomcat → 部署 WAR → 启动 Tomcat |
+| stop.sh | Linux 停止脚本：优雅关闭 Tomcat |
+| start.bat | Windows 本地开发脚本：编译 → 使用内嵌 Tomcat 启动 |
+| stop.bat | Windows 停止脚本：查找并终止 Java 进程 |
