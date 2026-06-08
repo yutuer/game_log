@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/game-logs")
 @RequiredArgsConstructor
@@ -30,8 +32,8 @@ public class GameLogController {
      * 批量新增日志
      */
     @PostMapping("/batch")
-    public ResponseEntity<Result<Void>> createGameLogBatch(@RequestBody GameLogBatchCreateDTO dto) {
-        gameLogService.createGameLogBatch(dto);
+    public ResponseEntity<Result<Void>> createGameLogBatch(@RequestBody List<GameLogCreateDTO> logs) {
+        gameLogService.createGameLogBatch(logs);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(Result.success(null));
     }

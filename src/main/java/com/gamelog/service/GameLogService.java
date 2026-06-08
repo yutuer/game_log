@@ -41,8 +41,8 @@ public class GameLogService {
     /**
      * 批量异步新增日志
      */
-    public int createGameLogBatch(GameLogBatchCreateDTO dto) {
-        List<GameLog> gameLogs = dto.getLogs().stream().map(item -> {
+    public int createGameLogBatch(List<GameLogCreateDTO> logs) {
+        List<GameLog> gameLogs = logs.stream().map(item -> {
             GameLog gameLog = new GameLog();
             gameLog.setGameName(item.getGameName());
             gameLog.setPlayer(item.getPlayer());
