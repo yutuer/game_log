@@ -6,6 +6,7 @@ import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -94,7 +95,9 @@ public class GameLogService {
 
     /**
      * 获取统计数据
+     * 缓存 30 秒，避免频繁查询数据库
      */
+    @Cacheable(value = "gameLogStats", key = "'all'")
     public GameLogStatsDTO getStats() {
         GameLogStatsDTO stats = new GameLogStatsDTO();
 

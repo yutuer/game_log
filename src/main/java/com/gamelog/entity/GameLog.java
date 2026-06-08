@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
     @Index(name = "idx_game_name", columnList = "gameName"),
     @Index(name = "idx_player", columnList = "player"),
     @Index(name = "idx_play_time", columnList = "playTime"),
-    @Index(name = "idx_game_name_play_time", columnList = "gameName, playTime")
+    @Index(name = "idx_game_name_play_time", columnList = "gameName, playTime"),
+    @Index(name = "idx_created_at", columnList = "createdAt"),
+    @Index(name = "idx_action", columnList = "action")
 })
 public class GameLog {
 

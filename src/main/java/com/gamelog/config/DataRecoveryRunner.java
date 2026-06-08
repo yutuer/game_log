@@ -2,7 +2,6 @@ package com.gamelog.config;
 
 import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,16 +90,9 @@ public class DataRecoveryRunner implements ApplicationRunner {
                         continue;
                     }
 
-                    // Log4j2 JsonTemplateLayout 输出的格式需要特殊处理
-                    // 格式可能是 {"eventTime":"...","message":"{...}"} 或者直接的 GameLog JSON
-                    JsonNode json = objectMapper.readTree(line);
-                    String message = json.get("message").asText();
-
-                    // 尝试解析 message 中的 GameLog JSON
-                    if (message != null && message.startsWith("{")) {
-                        GameLog gameLog = objectMapper.readValue(message, GameLog.class);
-                        logsFromFile.add(gameLog);
-                    }
+                    // 每行就是一个 GameLog 的 JSON 字符串
+                    GameLog gameLog = objectMapper.readValue(line, GameLog.class);
+                    logsFromFile.add(gameLog);
                 } catch (Exception e) {
                     parseFailCount++;
                     if (parseFailCount <= 3) {

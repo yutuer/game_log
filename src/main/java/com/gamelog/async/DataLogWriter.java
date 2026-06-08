@@ -1,5 +1,6 @@
 package com.gamelog.async;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gamelog.entity.GameLog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.LogManager;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 public class DataLogWriter {
 
     private static final Logger dataLogger = LogManager.getLogger("DataLogger");
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 将 GameLog 写入日志文件
@@ -23,8 +25,9 @@ public class DataLogWriter {
      */
     public void logData(GameLog gameLog) {
         try {
-            // 写入 JSON 格式的日志（Log4j2 会自动序列化）
-            dataLogger.info(gameLog);
+            // 转为 JSON 字符串后写入
+            String json = objectMapper.writeValueAsString(gameLog);
+            dataLogger.info(json);
         } catch (Exception e) {
             // 日志写入失败不影响主流程，但需要记录
             log.error("数据日志写入失败: gameName={}, player={}",

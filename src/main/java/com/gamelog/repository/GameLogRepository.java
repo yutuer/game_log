@@ -35,8 +35,8 @@ public interface GameLogRepository extends JpaRepository<GameLog, Long> {
     // 统计接口：今日总数
     long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
-    // 统计接口：按游戏名称分组统计
-    @Query("SELECT g.gameName, COUNT(g) FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.gameName ORDER BY COUNT(g) DESC")
+    // 统计接口：按游戏名称分组统计（限制返回前50条）
+    @Query(value = "SELECT g.gameName, COUNT(g) FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.gameName ORDER BY COUNT(g) DESC LIMIT 50")
     List<Object[]> countByGameNameGroup(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     // 统计接口：按日期分组统计近N天
@@ -46,16 +46,16 @@ public interface GameLogRepository extends JpaRepository<GameLog, Long> {
     // 最近日志
     List<GameLog> findTop10ByOrderByCreatedAtDesc();
 
-    // 玩家排行榜：按玩家分组统计日志数量，降序排列
-    @Query("SELECT g.player, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.player ORDER BY cnt DESC")
+    // 玩家排行榜：按玩家分组统计日志数量，降序排列（限制返回前100条，避免返回过多数据）
+    @Query(value = "SELECT g.player, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.player ORDER BY cnt DESC LIMIT 100")
     List<Object[]> findPlayerStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     // 时段热力图：按天和小时分组统计（返回过去7天数据）
     @Query(value = "SELECT DATE(created_at) as day, HOUR(created_at) as hour, COUNT(*) as cnt FROM game_log WHERE created_at >= :start GROUP BY DATE(created_at), HOUR(created_at) ORDER BY day, hour", nativeQuery = true)
     List<Object[]> findDailyHourlyStats(@Param("start") LocalDateTime start);
 
-    // 操作类型分布：按action分组统计
-    @Query("SELECT g.action, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.action ORDER BY cnt DESC")
+    // 操作类型分布：按action分组统计（限制返回前20条）
+    @Query(value = "SELECT g.action, COUNT(g) as cnt FROM GameLog g WHERE g.createdAt BETWEEN :start AND :end GROUP BY g.action ORDER BY cnt DESC LIMIT 20")
     List<Object[]> findActionStats(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     // 游戏时长统计：计算平均游戏时长

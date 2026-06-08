@@ -591,29 +591,75 @@
         });
 
         function loadStats() {
-            // 加载统计数据
-            fetch('/api/game-logs/stats')
-                .then(function (res) { return res.json(); })
-                .then(function (json) {
-                    if (json.code === 200 && json.data) {
-                        renderStats(json.data);
-                    }
-                })
-                .catch(function (err) {
-                    console.error('获取统计数据失败:', err);
-                });
+            // 显示加载状态
+            showLoading();
 
-            // 加载队列状态
-            fetch('/api/game-logs/queue-status')
-                .then(function (res) { return res.json(); })
-                .then(function (json) {
-                    if (json.code === 200 && json.data) {
-                        renderQueueStatus(json.data);
+            // 使用 Promise.all 并行加载，减少等待时间
+            Promise.all([
+                fetchWithTimeout('/api/game-logs/stats', 10000),
+                fetchWithTimeout('/api/game-logs/queue-status', 5000)
+            ])
+                .then(function (results) {
+                    hideLoading();
+                    if (results[0] && results[0].code === 200 && results[0].data) {
+                        renderStats(results[0].data);
+                    }
+                    if (results[1] && results[1].code === 200 && results[1].data) {
+                        renderQueueStatus(results[1].data);
                     }
                 })
                 .catch(function (err) {
-                    console.error('获取队列状态失败:', err);
+                    hideLoading();
+                    console.error('加载数据失败:', err);
+                    showError('数据加载失败，请稍后重试');
                 });
+        }
+
+        // 带超时的 fetch
+        function fetchWithTimeout(url, timeout) {
+            return new Promise(function (resolve, reject) {
+                var timer = setTimeout(function () {
+                    reject(new Error('请求超时: ' + url));
+                }, timeout);
+                fetch(url)
+                    .then(function (res) { return res.json(); })
+                    .then(function (json) {
+                        clearTimeout(timer);
+                        resolve(json);
+                    })
+                    .catch(function (err) {
+                        clearTimeout(timer);
+                        reject(err);
+                    });
+            });
+        }
+
+        // 显示加载状态
+        function showLoading() {
+            var btn = document.getElementById('refreshBtn');
+            if (btn) {
+                btn.textContent = '加载中...';
+                btn.disabled = true;
+            }
+        }
+
+        // 隐藏加载状态
+        function hideLoading() {
+            var btn = document.getElementById('refreshBtn');
+            if (btn) {
+                btn.textContent = '刷新数据';
+                btn.disabled = false;
+            }
+        }
+
+        // 显示错误信息
+        function showError(msg) {
+            var btn = document.getElementById('refreshBtn');
+            if (btn) {
+                btn.textContent = '刷新失败 - 点击重试';
+                btn.disabled = false;
+            }
+            console.warn(msg);
         }
 
         function renderStats(data) {

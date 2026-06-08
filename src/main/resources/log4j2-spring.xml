@@ -15,7 +15,7 @@
         <RollingFile name="DataLog"
                      fileName="${DATA_LOG_PATH}/game-log.json"
                      filePattern="${DATA_LOG_PATH}/game-log-%d{yyyy-MM-dd}.json">
-            <JsonTemplateLayout/>
+            <PatternLayout pattern="%m%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy />
             </Policies>
