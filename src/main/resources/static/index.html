@@ -487,13 +487,14 @@
 
             // 渲染队列使用率仪表盘
             renderQueueGauge(data);
+            renderWriteGauge(data);
         }
 
         // 队列使用率仪表盘
         function renderQueueGauge(data) {
             var chart = echarts.init(document.getElementById('queue-gauge'));
             var queueSize = data.queueSize || 0;
-            var maxCapacity = 10000; // 与配置中的 queue-capacity 一致
+            var maxCapacity = 20000; // 与配置中的 queue-capacity 一致
             var usagePercent = Math.round((queueSize / maxCapacity) * 100);
 
             // 根据使用率设置颜色
@@ -566,6 +567,74 @@
                         }
                     },
                     data: [{ value: usagePercent }]
+                }]
+            });
+
+            window.addEventListener('resize', function () { chart.resize(); });
+        }
+
+        // 写入效率仪表盘（显示消费速度百分比）
+        var lastQueueSize = null;
+        var lastCheckTime = null;
+
+        function renderWriteGauge(data) {
+            var chart = echarts.init(document.getElementById('write-gauge'));
+            var queueSize = data.queueSize || 0;
+            var now = Date.now();
+
+            var efficiency = 100;
+
+            if (lastQueueSize !== null && lastCheckTime !== null) {
+                var queueDelta = lastQueueSize - queueSize;
+                var timeDelta = (now - lastCheckTime) / 1000;
+                if (timeDelta > 0) {
+                    var consumeRate = queueDelta / timeDelta;
+                    var idealRate = 200 * 4 / 0.5;
+                   var efficiency = Math.min(100, Math.round((consumeRate / idealRate) * 100));
+                }
+            }
+
+            lastQueueSize = queueSize;
+            lastCheckTime = now;
+
+            var color = efficiency > 70 ? '#4caf50' : (efficiency > 40 ? '#ff9800' : '#f44336');
+
+            chart.setOption({
+                series: [{
+                    type: 'gauge',
+                    startAngle: 180,
+                    endAngle: 0,
+                    min: 0,
+                    max: 100,
+                    splitNumber: 5,
+                    center: ['50%', '75%'],
+                    radius: '100%',
+                    itemStyle: { color: color },
+                    progress: { show: true, width: 18 },
+                    pointer: { show: false },
+                    axisLine: { lineStyle: { width: 18, color: [[1, '#333']] }},
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                    axisLabel: {
+                        distance: -40,
+                        color: '#aaa',
+                        fontSize: 10,
+                        formatter: function (v) { return v + '%'; }
+                    },
+                    anchor: { show: false },
+                    title: { show: false },
+                    detail: {
+                        valueAnimation: true,
+                        width: '60%',
+                        lineHeight: 20,
+                        borderRadius: 8,
+                        offsetCenter: [0, '35%'],
+                        fontSize: 24,
+                        fontWeight: 'bold',
+                        color: color,
+                        formatter: efficiency + '%'
+                    },
+                    data: [{ value: efficiency }]
                 }]
             });
 

@@ -1,7 +1,5 @@
 package com.gamelog;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -36,7 +34,6 @@ public class StressTest {
     private static final AtomicLong failCount = new AtomicLong(0);
     private static final AtomicLong totalBytes = new AtomicLong(0);
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     public static void main(String[] args) throws Exception {

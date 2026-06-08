@@ -18,11 +18,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 @ConfigurationProperties(prefix = "async.writer")
 public class AsyncConfig {
 
-    private int corePoolSize = 2;
-    private int maxPoolSize = 4;
-    private int queueCapacity = 10000;
-    private int batchSize = 100;
-    private long flushIntervalMs = 1000;
+    private int corePoolSize = 4;
+    private int maxPoolSize = 8;
+    private int queueCapacity = 20000;
+    private int batchSize = 200;
+    private long flushIntervalMs = 500;
 
     @Bean(name = "gameLogAsyncExecutor")
     public Executor gameLogAsyncExecutor() {
