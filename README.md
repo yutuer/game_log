@@ -284,10 +284,10 @@ Controller → Service → Repository → MySQL
 | MYSQL_URL | jdbc:mysql://localhost:3306/game_log | 数据库连接地址 |
 | MYSQL_USERNAME | root | 数据库用户名 |
 | MYSQL_PASSWORD | root | 数据库密码 |
-| HIKARI_MAX_POOL_SIZE | 20 | 连接池最大连接数 |
-| HIKARI_MIN_IDLE | 5 | 连接池最小空闲数 |
-| ASYNC_CORE_POOL_SIZE | 4 | 异步写入核心线程数 |
-| ASYNC_MAX_POOL_SIZE | 8 | 异步写入最大线程数 |
+| HIKARI_MAX_POOL_SIZE | 5 | 连接池最大连接数 |
+| HIKARI_MIN_IDLE | 2 | 连接池最小空闲数 |
+| ASYNC_CORE_POOL_SIZE | 2 | 异步写入核心线程数 |
+| ASYNC_MAX_POOL_SIZE | 4 | 异步写入最大线程数 |
 | ASYNC_QUEUE_CAPACITY | 10000 | 异步队列容量 |
 | ASYNC_BATCH_SIZE | 100 | 批量写入条数阈值 |
 | ASYNC_FLUSH_INTERVAL_MS | 1000 | 批量写入时间阈值(ms) |
