@@ -354,8 +354,9 @@
 
         .monitor-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 2fr;
-            gap: 20px;
+            grid-template-columns: 1fr 1fr 1.5fr;
+            gap: 16px;
+            align-items: start;
         }
 
         @media (max-width: 900px) {
@@ -495,7 +496,7 @@
                 </div>
 
                 <!-- 实时状态 -->
-                <div style="display: flex; flex-direction: column; gap: 8px; justify-content: center;">
+                <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center; padding-left: 20px;">
                     <div class="monitor-stat">
                         <span class="stat-label">队列积压</span>
                         <span class="stat-value" id="queue-size">-</span>
