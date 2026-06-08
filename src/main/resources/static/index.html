@@ -641,32 +641,32 @@
             });
 
             // 7天趋势
-            fetchAndRender('/api/game-logs/stats/trend', 8000, function (data) {
+            fetchAndRender('/api/game-logs/stats/trend', 30000, function (data) {
                 renderTrendChart(data || []);
             });
 
-            // 游戏分布
-            fetchAndRender('/api/game-logs/stats/game-distribution', 8000, function (data) {
+            // 游戏分布（30天聚合，200w数据可能较慢）
+            fetchAndRender('/api/game-logs/stats/game-distribution', 30000, function (data) {
                 renderPieChart(data || []);
             });
 
             // 最近日志（有索引，TOP 10）
-            fetchAndRender('/api/game-logs/stats/recent-logs', 5000, function (data) {
+            fetchAndRender('/api/game-logs/stats/recent-logs', 30000, function (data) {
                 renderRecentLogs(data || []);
             });
 
-            // 玩家排行
-            fetchAndRender('/api/game-logs/stats/player-leaderboard', 10000, function (data) {
+            // 玩家排行（30天聚合）
+            fetchAndRender('/api/game-logs/stats/player-leaderboard', 30000, function (data) {
                 renderLeaderboard(data || []);
             });
 
-            // 操作分布
-            fetchAndRender('/api/game-logs/stats/action-distribution', 10000, function (data) {
+            // 操作分布（30天聚合）
+            fetchAndRender('/api/game-logs/stats/action-distribution', 30000, function (data) {
                 renderActionChart(data || []);
             });
 
-            // 热力图（查询最重，最后加载）
-            fetchAndRender('/api/game-logs/stats/hourly-activity', 15000, function (data) {
+            // 热力图（7天×24小时聚合，查询最重，最后加载）
+            fetchAndRender('/api/game-logs/stats/hourly-activity', 30000, function (data) {
                 renderHourlyHeatmap(data || []);
             });
 

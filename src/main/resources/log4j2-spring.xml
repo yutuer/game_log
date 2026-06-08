@@ -3,6 +3,7 @@
     <Properties>
         <Property name="LOG_PATH">logs</Property>
         <Property name="DATA_LOG_PATH">${LOG_PATH}/data</Property>
+        <Property name="GATEWAY_LOG_PATH">${LOG_PATH}/gateway</Property>
     </Properties>
 
     <Appenders>
@@ -21,12 +22,28 @@
             </Policies>
             <DefaultRolloverStrategy max="7"/>
         </RollingFile>
+
+        <!-- 网关请求/响应日志 RollingFile Appender（按天滚动） -->
+        <RollingFile name="GatewayLog"
+                     fileName="${GATEWAY_LOG_PATH}/gateway.log"
+                     filePattern="${GATEWAY_LOG_PATH}/gateway-%d{yyyy-MM-dd}.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level - %msg%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+            <DefaultRolloverStrategy max="7"/>
+        </RollingFile>
     </Appenders>
 
     <Loggers>
         <!-- 数据日志 Logger（异步写入） -->
         <Logger name="DataLogger" level="info" additivity="false">
             <AppenderRef ref="DataLog"/>
+        </Logger>
+
+        <!-- 网关请求/响应日志 Logger -->
+        <Logger name="GatewayLogger" level="info" additivity="false">
+            <AppenderRef ref="GatewayLog"/>
         </Logger>
 
         <!-- 应用日志 -->
