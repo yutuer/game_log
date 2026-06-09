@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -79,6 +80,7 @@ public interface GameLogRepository extends JpaRepository<GameLog, Long> {
      * 删除 id_sequence 中旧的 game_log_id_seq 行
      */
     @Modifying
+    @Transactional
     @Query(value = "DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'", nativeQuery = true)
     void deleteIdSequence();
 
@@ -86,6 +88,7 @@ public interface GameLogRepository extends JpaRepository<GameLog, Long> {
      * 插入新的 id_sequence 行，从指定值开始
      */
     @Modifying
+    @Transactional
     @Query(value = "INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_id_seq', :startValue)", nativeQuery = true)
     void insertIdSequence(@Param("startValue") long startValue);
 }
