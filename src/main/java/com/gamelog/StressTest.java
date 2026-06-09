@@ -157,6 +157,10 @@ public class StressTest {
         }
 
         int responseCode = conn.getResponseCode();
+        // 读取并丢弃响应体，使连接可被 keep-alive 缓存复用
+        try (java.io.InputStream is = conn.getInputStream()) {
+            while (is.read() != -1) {}
+        }
 
         if (responseCode != 202 && responseCode != 200) {
             System.out.printf("[ERR] %s | HTTP %d%n", player, responseCode);
