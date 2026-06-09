@@ -43,6 +43,7 @@ public class DataRecoveryRunner implements ApplicationRunner {
     private static final int RETENTION_DAYS = 7;  // 保留最近7天日志
 
     @Override
+    @Transactional
     public void run(ApplicationArguments args) throws Exception {
         log.info("========== 数据恢复检查启动 ==========");
 
@@ -94,8 +95,7 @@ public class DataRecoveryRunner implements ApplicationRunner {
      * 初始化 id_sequence 初始值，从当前 game_log 表最大 ID + 1 开始
      * 避免 Hibernate TABLE 策略分配的 ID 与已有记录主键冲突
      */
-    @Transactional
-    public void initIdSequence() {
+    private void initIdSequence() {
         try {
             // 获取当前最大主键 ID
             Number maxIdResult = (Number) entityManager
@@ -105,9 +105,9 @@ public class DataRecoveryRunner implements ApplicationRunner {
             long startValue = maxId + 1;
 
             // 重置 id_sequence（DELETE + INSERT 在同一事务中）
-            entityManager.createNativeQuery("DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'")
+            entityManager.createNativeQuery("DELETE FROM id_sequence WHERE gen_name = 'game_log_seq'")
                     .executeUpdate();
-            entityManager.createNativeQuery("INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_id_seq', :startValue)")
+            entityManager.createNativeQuery("INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_seq', :startValue)")
                     .setParameter("startValue", startValue)
                     .executeUpdate();
 

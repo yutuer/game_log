@@ -30,6 +30,11 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:fix-id-sequence.sql
+      continue-on-error: true
 
 # 异步写入配置
 async:
