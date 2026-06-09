@@ -57,13 +57,25 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
         // 3. 逐个文件恢复数据
         int totalRecovered = 0;
+        boolean allSyncSuccess = true;
         for (Path file : logFiles) {
             int count = recoverFromFile(file);
-            totalRecovered += count;
+            if (count >= 0) {
+                totalRecovered += count;
+            } else {
+                allSyncSuccess = false;
+            }
         }
 
         // 4. 清理过期日志文件
         cleanupOldFiles(logDir);
+
+        // 5. 同步成功后截断当前日志文件，避免文件无限增大
+        if (allSyncSuccess) {
+            truncateCurrentFile(Paths.get(LOG_PATH));
+        } else {
+            log.warn("部分文件恢复失败，不清空日志文件，下次启动将重试");
+        }
 
         log.info("========== 数据恢复完成: 共恢复 {} 条记录 ==========", totalRecovered);
     }
@@ -127,8 +139,13 @@ public class DataRecoveryRunner implements ApplicationRunner {
             log.info("发现 {} 条未入库记录，准备恢复", toRecover.size());
 
             // 5. 批量插入
-            gameLogRepository.saveAll(toRecover);
-            log.info("成功恢复 {} 条记录", toRecover.size());
+            try {
+                gameLogRepository.saveAll(toRecover);
+                log.info("成功恢复 {} 条记录", toRecover.size());
+            } catch (Exception e) {
+                log.error("批量恢复数据失败: {}, 将不清空日志文件", file.getFileName(), e);
+                return -1;
+            }
 
             return toRecover.size();
 
@@ -246,6 +263,24 @@ public class DataRecoveryRunner implements ApplicationRunner {
                     });
         } catch (IOException e) {
             log.warn("清理过期文件失败", e);
+        }
+    }
+
+    /**
+     * 数据同步成功后截断当前日志文件
+     * 避免日志文件无限增大导致启动恢复时性能问题
+     */
+    private void truncateCurrentFile(Path logDir) {
+        Path currentFile = logDir.resolve("game-log.jsonl");
+        if (!Files.exists(currentFile)) {
+            return;
+        }
+        try {
+            long size = Files.size(currentFile);
+            Files.write(currentFile, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
+            log.info("数据同步完成，已清空当前日志文件 (原大小 {} 字节)", size);
+        } catch (IOException e) {
+            log.warn("清空日志文件失败，不影响已有数据，下次启动将重试", e);
         }
     }
 }
