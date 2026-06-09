@@ -39,6 +39,9 @@ public class DataRecoveryRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
         log.info("========== 数据恢复检查启动 ==========");
 
+        // 0. 初始化 id_sequence 初始值（从当前最大 ID + 1 开始）
+        initIdSequence();
+
         // 1. 检查日志目录是否存在
         Path logDir = Paths.get(LOG_PATH);
         if (!Files.exists(logDir)) {
@@ -78,6 +81,22 @@ public class DataRecoveryRunner implements ApplicationRunner {
         }
 
         log.info("========== 数据恢复完成: 共恢复 {} 条记录 ==========", totalRecovered);
+    }
+
+    /**
+     * 初始化 id_sequence 初始值，从当前 game_log 表最大 ID + 1 开始
+     * 避免 Hibernate TABLE 策略分配的 ID 与已有记录主键冲突
+     */
+    private void initIdSequence() {
+        try {
+            long maxId = gameLogRepository.getMaxId();
+            long startValue = maxId + 1;
+            gameLogRepository.deleteIdSequence();
+            gameLogRepository.insertIdSequence(startValue);
+            log.info("id_sequence 已初始化: gen_value={} (max_id={})", startValue, maxId);
+        } catch (Exception e) {
+            log.warn("id_sequence 初始化失败，Hibernate 将使用默认值 0", e);
+        }
     }
 
     /**
