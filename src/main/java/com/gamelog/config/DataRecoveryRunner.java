@@ -12,9 +12,13 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * 数据恢复启动器
@@ -143,7 +147,7 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
         for (int i = 0; i < days; i++) {
             LocalDate date = LocalDate.now().minusDays(i);
-            String fileName = "game-log-" + date.format(formatter) + ".json";
+            String fileName = "game-log-" + date.format(formatter) + ".jsonl";
             Path file = logDir.resolve(fileName);
 
             if (Files.exists(file)) {
@@ -152,7 +156,7 @@ public class DataRecoveryRunner implements ApplicationRunner {
         }
 
         // 也检查当前文件（未滚动的）
-        Path currentFile = logDir.resolve("game-log.json");
+        Path currentFile = logDir.resolve("game-log.jsonl");
         if (Files.exists(currentFile)) {
             files.add(currentFile);
         }
@@ -164,15 +168,37 @@ public class DataRecoveryRunner implements ApplicationRunner {
      * 获取数据库中已存在的记录键
      */
     private Set<String> getExistingKeys(List<GameLog> logs) {
-        // 提取所有唯一的组合键
-        Set<String> keys = logs.stream()
+        if (logs == null || logs.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        // 提取 playTime 的最小值和最大值
+        LocalDateTime minTime = logs.stream()
+                .map(GameLog::getPlayTime)
+                .filter(Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+
+        LocalDateTime maxTime = logs.stream()
+                .map(GameLog::getPlayTime)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+
+        if (minTime == null || maxTime == null) {
+            log.debug("日志记录中 playTime 为空，无法查询数据库进行对比");
+            return Collections.emptySet();
+        }
+
+        // 查询时间范围内的数据库记录
+        Page<GameLog> dbLogs = gameLogRepository.findByPlayTimeBetween(minTime, maxTime, Pageable.unpaged());
+        Set<String> existingKeys = dbLogs.getContent().stream()
                 .map(this::buildKey)
                 .collect(Collectors.toSet());
 
-        // 查询数据库中存在的记录
-        // 这里简化处理：假设 GameLog 有唯一约束或我们使用现有查询
-        // 实际应该使用更高效的批量查询
-        return keys;  // 简化：直接返回，实际需要查询数据库验证
+        log.debug("数据库查询到 {} 条已有记录 (时间范围: {} ~ {})", existingKeys.size(), minTime, maxTime);
+
+        return existingKeys;
     }
 
     /**
@@ -195,12 +221,12 @@ public class DataRecoveryRunner implements ApplicationRunner {
             LocalDate cutoffDate = LocalDate.now().minusDays(RETENTION_DAYS);
 
             Files.list(logDir)
-                    .filter(path -> path.toString().endsWith(".json"))
+                    .filter(path -> path.toString().endsWith(".jsonl"))
                     .filter(path -> {
                         String fileName = path.getFileName().toString();
                         // 提取日期部分
                         if (fileName.contains("-")) {
-                            String dateStr = fileName.replace("game-log-", "").replace(".json", "");
+                            String dateStr = fileName.replace("game-log-", "").replace(".jsonl", "");
                             try {
                                 LocalDate fileDate = LocalDate.parse(dateStr, formatter);
                                 return fileDate.isBefore(cutoffDate);

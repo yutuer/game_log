@@ -6,7 +6,10 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "game_log", indexes = {
+@Table(name = "game_log", uniqueConstraints = @UniqueConstraint(
+    name = "uk_game_player_action_time",
+    columnNames = {"gameName", "player", "action", "playTime"}
+), indexes = {
     @Index(name = "idx_game_name", columnList = "gameName"),
     @Index(name = "idx_player", columnList = "player"),
     @Index(name = "idx_play_time", columnList = "playTime"),
@@ -17,7 +20,15 @@ import java.time.LocalDateTime;
 public class GameLog {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.TABLE, generator = "game_log_id_gen")
+    @TableGenerator(
+        name = "game_log_id_gen",
+        table = "id_sequence",
+        pkColumnName = "gen_name",
+        valueColumnName = "gen_value",
+        pkColumnValue = "game_log_seq",
+        allocationSize = 50
+    )
     private Long id;
 
     @Column(nullable = false, length = 100)

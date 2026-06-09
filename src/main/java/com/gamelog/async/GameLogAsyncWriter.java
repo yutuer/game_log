@@ -43,19 +43,17 @@ public class GameLogAsyncWriter {
      */
     private void registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            log.info("[SHUTDOWN] 服务关闭中，准备刷新剩余数据...");
-            // 将队列中剩余的数据写入日志文件（作为备份）
+            log.info("[SHUTDOWN] 服务关闭中，处理队列剩余数据...");
+            // drain 队列中剩余数据 → 同步入库（数据已在 submit() 时写入日志文件备份）
             List<GameLog> remaining = new ArrayList<>();
             queue.drainTo(remaining);
             if (!remaining.isEmpty()) {
-                log.info("[SHUTDOWN] 队列中还有 {} 条数据需要处理，写入日志文件备份", remaining.size());
-                dataLogWriter.logDataBatch(remaining);
-                // 尝试同步写入数据库
+                log.info("[SHUTDOWN] 队列中还有 {} 条数据需要同步入库", remaining.size());
                 try {
                     gameLogRepository.saveAll(remaining);
                     log.info("[SHUTDOWN] 成功将 {} 条数据写入数据库", remaining.size());
                 } catch (Exception e) {
-                    log.error("[SHUTDOWN] 写入数据库失败，数据已保存在日志文件中", e);
+                    log.error("[SHUTDOWN] 写入数据库失败，数据已保存在日志文件中, 重启后可恢复", e);
                 }
             }
             log.info("[SHUTDOWN] 关闭钩子执行完成");
@@ -67,8 +65,12 @@ public class GameLogAsyncWriter {
      * 同时写入日志文件作为备份
      */
     public boolean submit(GameLog gameLog) {
-        // 先写入日志文件（数据备份），不阻塞主流程
-        dataLogWriter.logData(gameLog);
+        // 先写入日志文件（数据备份）
+        boolean fileWritten = dataLogWriter.logData(gameLog);
+        if (!fileWritten) {
+            log.warn("[FILE] 日志文件写入失败，数据仅靠内存队列保障: gameName={}, player={}",
+                    gameLog.getGameName(), gameLog.getPlayer());
+        }
 
         int currentSize = queue.size();
         int capacity = queue.remainingCapacity();

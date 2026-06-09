@@ -17,30 +17,33 @@ import org.springframework.stereotype.Component;
 public class DataLogWriter {
 
     private static final Logger dataLogger = LogManager.getLogger("DataLogger");
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    /**
+     * 构造器注入 Spring 容器管理的 ObjectMapper Bean
+     * 该 Bean 已由 Spring Boot 自动配置注册了 JavaTimeModule，
+     * 可正确序列化 LocalDateTime 等 JSR310 时间类型
+     */
+    public DataLogWriter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * 将 GameLog 写入日志文件
-     * 使用 Log4j2 异步写入，不阻塞主业务流程
+     *
+     * @return true=写入成功, false=写入失败（外层会记录 warn 日志）
      */
-    public void logData(GameLog gameLog) {
+    public boolean logData(GameLog gameLog) {
         try {
-            // 转为 JSON 字符串后写入
             String json = objectMapper.writeValueAsString(gameLog);
             dataLogger.info(json);
+            return true;
         } catch (Exception e) {
-            // 日志写入失败不影响主流程，但需要记录
             log.error("数据日志写入失败: gameName={}, player={}",
                     gameLog.getGameName(), gameLog.getPlayer(), e);
+            return false;
         }
     }
 
-    /**
-     * 批量写入日志
-     */
-    public void logDataBatch(Iterable<GameLog> gameLogs) {
-        for (GameLog gameLog : gameLogs) {
-            logData(gameLog);
-        }
-    }
+
 }
