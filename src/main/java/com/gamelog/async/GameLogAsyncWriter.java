@@ -110,7 +110,22 @@ public class GameLogAsyncWriter {
     }
 
     private void startFlushThread() {
-        Thread flushThread = new Thread(() -> {
+        int threadCount = asyncConfig.getFlushThreads();
+        for (int i = 0; i < threadCount; i++) {
+            Thread flushThread = new Thread(new FlushTask(), "gamelog-flush-" + i);
+            flushThread.setDaemon(true);
+            flushThread.start();
+        }
+        log.info("Async flush threads started: count={}, batchSize={}, flushInterval={}ms, queueCapacity={}",
+                threadCount, asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs(), asyncConfig.getQueueCapacity());
+    }
+
+    /**
+     * 消费任务：从队列取数据，积攒批量后入库
+     */
+    private class FlushTask implements Runnable {
+        @Override
+        public void run() {
             List<GameLog> batch = new ArrayList<>(asyncConfig.getBatchSize());
             while (!Thread.currentThread().isInterrupted()) {
                 try {
@@ -142,11 +157,7 @@ public class GameLogAsyncWriter {
                     log.error("异步写入异常", e);
                 }
             }
-        }, "gamelog-flush");
-        flushThread.setDaemon(true);
-        flushThread.start();
-        log.info("Async flush thread started: batchSize={}, flushInterval={}ms, queueCapacity={}",
-                asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs(), asyncConfig.getQueueCapacity());
+        }
     }
 
     private void flushBatch(List<GameLog> batch) {
@@ -157,8 +168,8 @@ public class GameLogAsyncWriter {
             batchWriteCount.incrementAndGet();
             lastFlushTime = System.currentTimeMillis();
             long cost = System.currentTimeMillis() - start;
-            log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}",
-                    batch.size(), cost, queue.size());
+            log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}, thread={}",
+                    batch.size(), cost, queue.size(), Thread.currentThread().getName());
         } catch (Exception e) {
             log.error("[ASYNC-WRITE] Batch write failed, trying one by one: size={}", batch.size(), e);
             for (GameLog gameLog : batch) {
