@@ -34,6 +34,10 @@ spring:
         order_insert: true
         order_update: true
         batch_versioned_data: true
+        id:
+          optimizer:
+            pooled:
+              preferred: pooled-lo  # 显式指定 TABLE 生成器使用 PooledLoOptimizer，行为可预测
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai

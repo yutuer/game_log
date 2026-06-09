@@ -4,8 +4,6 @@ import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -15,7 +13,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
-
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.LocalDate;
@@ -40,11 +37,9 @@ public class DataRecoveryRunner implements ApplicationRunner {
     private final ObjectMapper objectMapper;
     private final DataSource dataSource;
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
     private static final String LOG_PATH = "logs/data";
     private static final int RETENTION_DAYS = 7;  // 保留最近7天日志
+    private static final int ID_ALLOCATION_SIZE = 50; // 必须与 GameLog.@TableGenerator(allocationSize) 一致
 
     /**
      * 在 Bean 初始化阶段（Tomcat 启动前）用原生 JDBC 修复 id_sequence
@@ -64,7 +59,7 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
             Long maxId = jdbc.queryForObject(
                     "SELECT COALESCE(MAX(id), 0) FROM game_log", Long.class);
-            long startValue = (maxId == null ? 0L : maxId) + 1;
+            long startValue = (maxId == null ? 0L : maxId) + ID_ALLOCATION_SIZE;
 
             jdbc.update("DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'");
 
@@ -88,9 +83,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) throws Exception {
         log.info("========== 数据恢复检查启动 ==========");
-
-        // 0. 初始化 id_sequence 初始值（从当前最大 ID + 1 开始）
-        initIdSequence();
 
         // 1. 检查日志目录是否存在
         Path logDir = Paths.get(LOG_PATH);
@@ -131,32 +123,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
         }
 
         log.info("========== 数据恢复完成: 共恢复 {} 条记录 ==========", totalRecovered);
-    }
-
-    /**
-     * 初始化 id_sequence 初始值，从当前 game_log 表最大 ID + 1 开始
-     * 避免 Hibernate TABLE 策略分配的 ID 与已有记录主键冲突
-     */
-    private void initIdSequence() {
-        try {
-            // 获取当前最大主键 ID
-            Number maxIdResult = (Number) entityManager
-                    .createNativeQuery("SELECT COALESCE(MAX(id), 0) FROM game_log")
-                    .getSingleResult();
-            long maxId = maxIdResult.longValue();
-            long startValue = maxId + 1;
-
-            // 重置 id_sequence（DELETE + INSERT 在同一事务中）
-            entityManager.createNativeQuery("DELETE FROM id_sequence WHERE gen_name = 'game_log_seq'")
-                    .executeUpdate();
-            entityManager.createNativeQuery("INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_seq', :startValue)")
-                    .setParameter("startValue", startValue)
-                    .executeUpdate();
-
-            log.info("id_sequence 已初始化: gen_value={} (max_id={})", startValue, maxId);
-        } catch (Exception e) {
-            log.warn("id_sequence 初始化失败，Hibernate 将使用默认值", e);
-        }
     }
 
     /**
