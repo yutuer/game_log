@@ -1,364 +1,247 @@
-# 游戏日志记录系统 (game-log-service)
+# Game Log Service
 
-## 项目简介
+游戏日志采集与查询服务。接收游戏服务器的 HTTP 请求，将游戏日志异步写入 MySQL，并支持按条件查询、聚合统计、CSV 导出。
 
-基于 SpringBoot 3.x 的游戏日志记录与查询服务，使用 MySQL 存储，支持高并发异步写入，提供 REST API 和可视化控制台。
+---
 
 ## 技术栈
 
-- Java 17 + SpringBoot 3.2.5
-- Spring Data JPA + MySQL
-- HikariCP 连接池
-- Lombok
-- ECharts 可视化
-- Maven (WAR 打包，支持外部 Tomcat 部署)
+| 组件 | 选型 | 说明 |
+|------|------|------|
+| 框架 | Spring Boot 3.2.5 / Java 17 | 基础框架 |
+| 数据库 | MySQL 8.0+ | HikariCP 连接池，Flyway 迁移 |
+| ORM | Spring Data JPA / Hibernate | TABLE 主键生成 + batch INSERT |
+| 缓存 | Caffeine（本地堆内缓存） | 统计接口 30s 缓存 |
+| 日志 | Log4j2（排除 Logback） | 双文件写入：gateway.log + game-log.jsonl |
+| 构建 | Maven | `pom.xml` 统一管理依赖 |
+| 部署 | Tomcat 10 / WAR | 也支持 `java -jar` / `mvn spring-boot:run` |
 
-## 项目结构
+---
+
+## 整体架构
 
 ```
-src/main/java/com/gamelog/
-├── GameLogApplication.java          # 主启动类
-├── ServletInitializer.java          # WAR 部署支持
-├── config/
-│   ├── AsyncConfig.java             # 异步线程池配置
-│   └── GlobalExceptionHandler.java  # 全局异常处理
-├── async/
-│   └── GameLogAsyncWriter.java      # 异步批量写入器
-├── entity/
-│   └── GameLog.java                 # 日志实体（含索引定义）
-├── repository/
-│   └── GameLogRepository.java       # 数据访问层
-├── service/
-│   └── GameLogService.java          # 业务逻辑层
-├── controller/
-│   └── GameLogController.java       # REST API 接口层
-└── dto/
-    ├── Result.java                  # 统一响应格式
-    ├── GameLogCreateDTO.java        # 新增日志请求
-    ├── GameLogBatchCreateDTO.java   # 批量新增请求
-    ├── GameLogQueryDTO.java         # 查询参数
-    └── GameLogStatsDTO.java         # 统计数据响应
-
-src/main/resources/
-├── application.yml                  # 主配置
-├── application-dev.yml              # 开发环境配置（热更新）
-└── static/
-    ├── index.html                   # 可视化控制台首页
-    └── query.html                   # 日志查询页面
-
-scripts/
-├── start.sh                         # Linux 部署启动脚本
-├── stop.sh                          # Linux 停止脚本
-├── start.bat                        # Windows 本地启动脚本
-└── stop.bat                         # Windows 本地停止脚本
+[客户端/游戏服] → HTTP POST → ContentCachingFilter（写 gateway.log）
+                                   ↓
+                              Controller（16 个 REST 接口）
+                                   ↓
+                              Service（带 Caffeine 缓存）
+                                   ↓
+     ┌──────────────────── GameLogAsyncWriter ────────────────────┐
+     │  ① logData() → 写 game-log.jsonl（同步，Log4j2 保护）        │
+     │  ② queue.offer() → LinkedBlockingQueue（20000 容量）        │
+     │  ③ flush 线程 drainTo(200) → saveAll（batch INSERT 真生效）  │
+     │  ④ 队列满时降级 → 同步 save(gameLog)                        │
+     └────────────────────────────────────────────────────────────┘
+                                   ↓
+                              MySQL（game_log 表）
 ```
 
-## 核心架构
+### 数据安全保障（三重）
 
-### 分层架构
-```
-Controller → Service → Repository → MySQL
-                ↓
-         GameLogAsyncWriter（异步写入队列）
+1. **写文件备份**：每条请求先同步写入 `game-log.jsonl`，再入队
+2. **内存队列 + 后台 flush**：异步批量入库，队列 20000 容量
+3. **启动时文件恢复**：服务重启后 `DataRecoveryRunner` 扫描 `.jsonl` 文件，与数据库查重后恢复缺失数据
+
+---
+
+## 快速开始（本地开发）
+
+### 前置条件
+
+- JDK 17+
+- Maven 3.8+
+- MySQL 8.0+（创建数据库 `game_log`）
+
+### 启动
+
+```bash
+# 1. 创建 MySQL 数据库
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS game_log DEFAULT CHARSET utf8mb4;"
+
+# 2. 启动服务（自动建表+迁移）
+git clone <repo-url> && cd game-log-service
+scripts\start.bat          # Windows
+bash scripts/start.sh      # Linux（部署到 Tomcat）
+# 或直接运行：
+mvn spring-boot:run         # 开发模式
 ```
 
-### 异步写入流程
-```
-请求 → 提交到有界队列(10000) → 立即返回202
-              ↓
-     后台线程积攒批量(100条/1秒)
-              ↓
-        saveAll 批量写入 MySQL
-              ↓
-     队列满时降级为同步写入（确保不丢数据）
+应用启动后访问：`http://localhost:8080`
+
+---
+
+## 云服务部署
+
+### 环境变量配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MYSQL_URL` | `jdbc:mysql://localhost:3306/game_log?...` | 数据库 JDBC URL |
+| `MYSQL_USERNAME` | `root` | 数据库用户名 |
+| `MYSQL_PASSWORD` | `root` | 数据库密码 |
+| `HIKARI_MAX_POOL_SIZE` | `5` | 连接池最大连接数 |
+| `ASYNC_QUEUE_CAPACITY` | `20000` | 异步队列容量 |
+| `ASYNC_BATCH_SIZE` | `200` | 每批入库条数 |
+| `ASYNC_FLUSH_INTERVAL_MS` | `500` | 队列空时轮询间隔（ms） |
+
+### Linux 部署（Tomcat）
+
+```bash
+# 项目自带部署脚本
+bash scripts/start.sh       # 编译 → 停 Tomcat → 部署 WAR → 启动
+bash scripts/stop.sh        # 优雅关闭 Tomcat
+
+# Tomcat 路径：/usr/local/tomcat
+# 启动日志：tail -f /usr/local/tomcat/logs/catalina.out
 ```
 
-### 数据库索引
-| 索引名 | 字段 | 用途 |
-|--------|------|------|
-| idx_game_name | gameName | 按游戏名称筛选 |
-| idx_player | player | 按玩家筛选 |
-| idx_play_time | playTime | 按时间范围查询 |
-| idx_game_name_play_time | gameName, playTime | 复合查询覆盖索引 |
+### 目录结构（运行期）
+
+```
+game-log-service/
+├── logs/
+│   ├── gateway/
+│   │   └── gateway.log              # 网关请求日志（按天滚动，保留 7 天）
+│   └── data/
+│       ├── game-log.jsonl           # 数据备份日志（当前文件）
+│       └── game-log-YYYY-MM-DD.jsonl # 滚动备份（保留 7 天）
+└── db/migration/
+    └── V1.0.0__init_schema.sql      # 建表脚本（Flyway 自动执行）
+    └── V1.0.1__add_composite_indexes.sql  # 复合索引
+    └── V1.0.2__add_unique_constraint.sql  # 唯一约束
+    └── V1.0.3__create_id_sequence.sql     # ID 序列表
+```
 
 ---
 
 ## API 接口
 
-基础路径：`http://localhost:8080/api/game-logs`
+### 写入接口
 
-### 1. 新增日志
-
-- **请求**：`POST /api/game-logs`
-- **状态码**：202 Accepted（异步写入，已接受）
-- **请求体**：
-```json
-{
-  "gameName": "原神",
-  "player": "player001",
-  "action": "登录",
-  "detail": "每日登录奖励",
-  "playTime": "2026-06-08 10:00:00"
-}
-```
-- **响应**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": null
-}
-```
-
-### 2. 批量新增日志
-
-- **请求**：`POST /api/game-logs/batch`
-- **状态码**：202 Accepted
-- **请求体**：
-```json
-{
-  "logs": [
-    {
-      "gameName": "原神",
-      "player": "player001",
-      "action": "登录",
-      "detail": "每日登录奖励",
-      "playTime": "2026-06-08 10:00:00"
-    },
-    {
-      "gameName": "王者荣耀",
-      "player": "player002",
-      "action": "对战",
-      "detail": "排位赛胜利",
-      "playTime": "2026-06-08 10:05:00"
-    }
-  ]
-}
-```
-- **响应**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": null
-}
-```
-
-### 3. 分页查询日志
-
-- **请求**：`GET /api/game-logs`
-- **状态码**：200 OK
-- **查询参数**：
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| gameName | String | 否 | 按游戏名称筛选 |
-| player | String | 否 | 按玩家筛选 |
-| startTime | String | 否 | 起始时间 (yyyy-MM-dd HH:mm:ss) |
-| endTime | String | 否 | 结束时间 (yyyy-MM-dd HH:mm:ss) |
-| page | Integer | 否 | 页码，默认 0 |
-| size | Integer | 否 | 每页条数，默认 20 |
-
-- **示例**：`GET /api/game-logs?gameName=原神&page=0&size=10`
-- **响应**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "content": [
-      {
-        "id": 1,
-        "gameName": "原神",
-        "player": "player001",
-        "action": "登录",
-        "detail": "每日登录奖励",
-        "playTime": "2026-06-08 10:00:00",
-        "createdAt": "2026-06-08 10:00:01"
-      }
-    ],
-    "totalElements": 100,
-    "totalPages": 10,
-    "number": 0,
-    "size": 10
-  }
-}
-```
-
-### 4. 查询单条日志
-
-- **请求**：`GET /api/game-logs/{id}`
-- **状态码**：200 OK / 404 Not Found
-- **示例**：`GET /api/game-logs/1`
-- **成功响应**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "id": 1,
-    "gameName": "原神",
-    "player": "player001",
-    "action": "登录",
-    "detail": "每日登录奖励",
-    "playTime": "2026-06-08 10:00:00",
-    "createdAt": "2026-06-08 10:00:01"
-  }
-}
-```
-- **失败响应**：
-```json
-{
-  "code": 404,
-  "message": "日志不存在",
-  "data": null
-}
-```
-
-### 5. 删除日志
-
-- **请求**：`DELETE /api/game-logs/{id}`
-- **状态码**：200 OK / 404 Not Found
-- **示例**：`DELETE /api/game-logs/1`
-- **成功响应**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": null
-}
-```
-
-### 6. 统计数据
-
-- **请求**：`GET /api/game-logs/stats`
-- **状态码**：200 OK
-- **响应**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "todayCount": 150,
-    "trend": [
-      { "date": "2026-06-02", "count": 80 },
-      { "date": "2026-06-03", "count": 95 },
-      { "date": "2026-06-08", "count": 150 }
-    ],
-    "gameDistribution": [
-      { "gameName": "原神", "count": 500 },
-      { "gameName": "王者荣耀", "count": 350 }
-    ],
-    "recentLogs": [
-      {
-        "id": 1,
-        "gameName": "原神",
-        "player": "player001",
-        "action": "登录",
-        "detail": "每日登录奖励",
-        "playTime": "2026-06-08 10:00:00",
-        "createdAt": "2026-06-08 10:00:01"
-      }
-    ]
-  }
-}
-```
-
----
-
-## 可视化控制台
-
-| 页面 | 地址 | 说明 |
+| 方法 | 路径 | 说明 |
 |------|------|------|
-| 概览仪表盘 | `http://localhost:8080/` | 今日总数、7天趋势折线图、游戏占比饼图、最近日志 |
-| 日志查询 | `http://localhost:8080/query.html` | 按游戏/玩家/时间筛选，分页浏览 |
+| `POST` | `/api/game-logs` | 创建单条游戏日志 |
+| `POST` | `/api/game-logs/batch` | 批量创建游戏日志 |
+
+### 查询接口
+
+| 方法 | 路径 | 参数 | 说明 |
+|------|------|------|------|
+| `POST` | `/api/game-logs/list` | `gameName`, `player`, `action`, `startTime`, `endTime`, 分页 | 分页查询 |
+| `DELETE` | `/api/game-logs` | `gameName`, `player` | 删除记录 |
+| `DELETE` | `/api/game-logs/time` | `startTime`, `endTime` | 按时间范围删除 |
+| `GET` | `/api/game-logs/count` | `gameName`, `player` | 统计总数（缓存 30s） |
+| `GET` | `/api/game-logs/count/distinct/players` | `gameName` | 统计去重玩家数（缓存 30s） |
+| `GET` | `/api/game-logs/count/distinct/actions` | `gameName`, `player` | 统计去重动作数（缓存 30s） |
+| `GET` | `/api/game-logs/count/duration/avg` | `gameName` | 统计平均时长（缓存 30s） |
+| `GET` | `/api/game-logs/count/duration/max` | `gameName` | 统计最大时长（缓存 30s） |
+| `GET` | `/api/game-logs/count/by-action` | `gameName`, `startTime`, `endTime` | 按 action 分组统计（缓存 30s） |
+| `GET` | `/api/game-logs/activity/daily` | `gameName`, `startTime`, `endTime` | 每日活跃玩家数（缓存 30s） |
+
+### 统计数据
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/game-logs/stats/summary` | 概要统计（缓存 30s） |
+| `GET` | `/api/game-logs/export` | 导出 CSV |
 
 ---
 
-## 配置说明
+## 项目结构
 
-### 环境变量
+```
+src/main/java/com/gamelog/
+├── GameLogApplication.java        # 启动入口
+├── async/
+│   ├── GameLogAsyncWriter.java    # 异步写入器（队列 + flush 线程）
+│   └── DataLogWriter.java         # 日志文件写入器（Log4j2）
+├── config/
+│   ├── AsyncConfig.java           # 异步配置（queue/batch/flush）
+│   ├── CacheConfig.java           # Caffeine 缓存配置
+│   ├── DataRecoveryRunner.java    # 启动恢复 Runner
+│   └── WebConfig.java             # Filter 注册
+├── controller/
+│   └── GameLogController.java     # REST 接口（16 个）
+├── dto/
+│   └── GameLogCreateDTO.java      # 创建请求 DTO
+├── entity/
+│   └── GameLog.java               # JPA 实体
+├── filter/
+│   └── ContentCachingFilter.java  # 网关日志 Filter
+├── repository/
+│   └── GameLogRepository.java     # JPA Repository（含统计查询）
+├── service/
+│   └── GameLogService.java        # 业务逻辑层
+└── exception/
+    └── GlobalExceptionHandler.java # 统一异常处理
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| MYSQL_URL | jdbc:mysql://localhost:3306/game_log | 数据库连接地址 |
-| MYSQL_USERNAME | root | 数据库用户名 |
-| MYSQL_PASSWORD | root | 数据库密码 |
-| HIKARI_MAX_POOL_SIZE | 5 | 连接池最大连接数 |
-| HIKARI_MIN_IDLE | 2 | 连接池最小空闲数 |
-| ASYNC_CORE_POOL_SIZE | 2 | 异步写入核心线程数 |
-| ASYNC_MAX_POOL_SIZE | 4 | 异步写入最大线程数 |
-| ASYNC_QUEUE_CAPACITY | 10000 | 异步队列容量 |
-| ASYNC_BATCH_SIZE | 100 | 批量写入条数阈值 |
-| ASYNC_FLUSH_INTERVAL_MS | 1000 | 批量写入时间阈值(ms) |
+db/migration/                      # Flyway 迁移脚本
+scripts/                           # 部署脚本（start/stop）
+logs/                              # 运行期日志（已 gitignore）
+```
 
 ---
 
-## 启动方式
+## 关键设计要点
 
-### Windows 本地开发
-```cmd
-scripts\start.bat
-```
-使用 SpringBoot 内嵌 Tomcat 启动，启用 dev profile（热更新）。
-
-### Linux 阿里云部署（Tomcat）
-```bash
-chmod +x scripts/*.sh
-./scripts/start.sh
-```
-脚本自动完成：编译打包 → 停止旧 Tomcat → 部署 WAR 包 → 启动 Tomcat。
-
-### 停止服务
-- Windows：`scripts\stop.bat` 或在启动窗口按 Ctrl+C
-- Linux：`./scripts/stop.sh`
-
----
-
-## Tomcat 部署指南
-
-### 前提条件
-- JDK 17+
-- Tomcat 9.x 或 10.x（支持 Jakarta EE）
-- MySQL 数据库
-
-### 部署步骤
-
-**1. 打包 WAR 文件**
-```bash
-mvn clean package -DskipTests
-```
-生成的 WAR 包位于 `target/game-log-service.war`
-
-**2. 配置 MySQL**
-确保 MySQL 中已创建 `game_log` 数据库：
-```sql
-CREATE DATABASE IF NOT EXISTS game_log CHARACTER SET utf8mb4;
-```
-
-**3. 配置 application.yml**
-修改生产环境配置，添加 MySQL 服务器地址：
-```bash
-# 在启动前设置环境变量
-export MYSQL_URL="jdbc:mysql://你的阿里云IP:3306/game_log"
-export MYSQL_USERNAME="你的用户名"
-export MYSQL_PASSWORD="你的密码"
-```
-
-**4. 部署到 Tomcat**
-- 将 `target/game-log-service.war` 上传到服务器
-- 复制到 Tomcat 的 `webapps/` 目录
-- Tomcat 会自动解压并启动
-
-**5. 访问应用**
-- 内嵌 Tomcat 模式：`http://服务器IP:8080/`
-- Tomcat 部署模式：`http://服务器IP:8080/game-log-service/`
-
-### 脚本说明
-
-| 脚本 | 用途 |
+| 设计 | 说明 |
 |------|------|
-| start.sh | Linux 部署脚本：编译 → 停止旧 Tomcat → 部署 WAR → 启动 Tomcat |
-| stop.sh | Linux 停止脚本：优雅关闭 Tomcat |
-| start.bat | Windows 本地开发脚本：编译 → 使用内嵌 Tomcat 启动 |
-| stop.bat | Windows 停止脚本：查找并终止 Java 进程 |
+| **异步写入** | `GameLogAsyncWriter` 使用 `LinkedBlockingQueue` + 单守护线程批量入库，不阻塞 Tomcat 请求线程 |
+| **双文件日志** | `gateway.log`（HTTP 请求记录）+ `game-log.jsonl`（业务数据备份），互为补充 |
+| **批量 INSERT** | 主键策略为 `GenerationType.TABLE`（`allocationSize=50`），Hibernate batch INSERT 真正生效，200 条入库仅 4 次 JDBC 往返 |
+| **启动恢复** | `DataRecoveryRunner` 启动时扫描 `.jsonl` 文件，按 `playTime` 范围查数据库去重，恢复未入库数据 |
+| **数据库唯一约束** | `UNIQUE(game_name, player, action, play_time)` 防止重复入库 |
+| **Caffeine 缓存** | 统计接口 30s 过期，避免高频查询压数据库 |
+| **优雅关闭** | 注册 JVM shutdown hook，关闭前 drain 队列剩余数据入库 |
+
+---
+
+## 线程模型
+
+| 线程 | 类型 | 数量 | 职责 |
+|------|------|:----:|------|
+| Tomcat 工作线程 | 非守护 | 200 | 处理 HTTP 请求，写文件，入队 |
+| `gamelog-flush` | 守护 | 1 | drain 内存队列 → 批量入库 |
+| `gamelog-shutdown-hook` | 非守护 | 1 | 关闭时 drain 剩余数据入库 |
+| HikariCP 连接池 | 守护 | max=5 | 所有数据库操作 |
+
+---
+
+## 常见命令
+
+```bash
+mvn spring-boot:run                # 开发模式启动
+mvn clean compile                  # 编译
+mvn test                           # 运行测试
+mvn clean package -DskipTests      # 打包 WAR
+bash scripts/start.sh              # Linux 部署
+bash scripts/stop.sh               # Linux 停止
+scripts\start.bat                  # Windows 本地启动
+```
+
+---
+
+## 配置参考
+
+### `application.yml` 关键配置项
+
+```yaml
+async:
+  writer:
+    queue-capacity: 20000    # 异步队列容量
+    batch-size: 200          # 每批入库条数
+    flush-interval-ms: 500   # 轮询间隔（ms）
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update       # 自动建表/迁移
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50     # JDBC batch INSERT 大小
+        order_insert: true   # 启用以使 batch 生效
+```
+
+> 所有配置均支持环境变量覆盖，详见[上方环境变量表](#云服务部署)。
