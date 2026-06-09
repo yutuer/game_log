@@ -3,15 +3,18 @@ package com.gamelog.config;
 import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.transaction.annotation.Transactional;
+import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import javax.sql.DataSource;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -35,12 +38,51 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
     private final GameLogRepository gameLogRepository;
     private final ObjectMapper objectMapper;
+    private final DataSource dataSource;
 
     @PersistenceContext
     private EntityManager entityManager;
 
     private static final String LOG_PATH = "logs/data";
     private static final int RETENTION_DAYS = 7;  // 保留最近7天日志
+
+    /**
+     * 在 Bean 初始化阶段（Tomcat 启动前）用原生 JDBC 修复 id_sequence
+     * 此时 JPA 已完成初始化、game_log 表已存在，但 HTTP 端口尚未开放
+     */
+    @PostConstruct
+    void init() {
+        fixIdSequenceWithJdbc();
+    }
+
+    /**
+     * 原生 JDBC 方式修复 id_sequence（不依赖 EntityManager/@Transactional）
+     */
+    private void fixIdSequenceWithJdbc() {
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+            Long maxId = jdbc.queryForObject(
+                    "SELECT COALESCE(MAX(id), 0) FROM game_log", Long.class);
+            long startValue = (maxId == null ? 0L : maxId) + 1;
+
+            jdbc.update("DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'");
+
+            int updated = jdbc.update(
+                    "UPDATE id_sequence SET gen_value = ? WHERE gen_name = 'game_log_seq'",
+                    startValue);
+            if (updated == 0) {
+                jdbc.update(
+                        "INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_seq', ?)",
+                        startValue);
+            }
+
+            log.info("[EarlyInit] id_sequence 已初始化: gen_value={} (max_id={})",
+                    startValue, maxId);
+        } catch (Exception e) {
+            log.warn("[EarlyInit] 初始化失败（game_log / id_sequence 表可能还不可用）", e);
+        }
+    }
 
     @Override
     @Transactional
