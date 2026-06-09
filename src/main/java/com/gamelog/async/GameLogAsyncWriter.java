@@ -3,10 +3,12 @@ package com.gamelog.async;
 import com.gamelog.config.AsyncConfig;
 import com.gamelog.dto.QueueStatusDTO;
 import com.gamelog.entity.GameLog;
-import com.gamelog.repository.GameLogRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
+import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -17,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class GameLogAsyncWriter {
 
-    private final GameLogRepository gameLogRepository;
+    private final DataSource dataSource;
     private final AsyncConfig asyncConfig;
     private final DataLogWriter dataLogWriter;
     private final BlockingQueue<GameLog> queue;
@@ -27,10 +29,12 @@ public class GameLogAsyncWriter {
     private final AtomicLong totalWriteCount = new AtomicLong(0);
     private volatile long lastFlushTime = 0L;
 
-    public GameLogAsyncWriter(GameLogRepository gameLogRepository,
+    private static final String INSERT_SQL = "INSERT INTO game_log (game_name, player, action, detail, play_time, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    public GameLogAsyncWriter(DataSource dataSource,
                               AsyncConfig asyncConfig,
                               DataLogWriter dataLogWriter) {
-        this.gameLogRepository = gameLogRepository;
+        this.dataSource = dataSource;
         this.asyncConfig = asyncConfig;
         this.dataLogWriter = dataLogWriter;
         this.queue = new LinkedBlockingQueue<>(asyncConfig.getQueueCapacity());
@@ -39,30 +43,23 @@ public class GameLogAsyncWriter {
     }
 
     /**
-     * 注册关闭钩子，确保服务关闭时将队列中剩余数据写入日志文件
+     * 注册关闭钩子，确保服务关闭时将队列中剩余数据写入数据库
      */
     private void registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("[SHUTDOWN] 服务关闭中，处理队列剩余数据...");
-            // drain 队列中剩余数据 → 同步入库（数据已在 submit() 时写入日志文件备份）
             List<GameLog> remaining = new ArrayList<>();
             queue.drainTo(remaining);
             if (!remaining.isEmpty()) {
-                log.info("[SHUTDOWN] 队列中还有 {} 条数据需要同步入库", remaining.size());
-                try {
-                    gameLogRepository.saveAll(remaining);
-                    log.info("[SHUTDOWN] 成功将 {} 条数据写入数据库", remaining.size());
-                } catch (Exception e) {
-                    log.error("[SHUTDOWN] 写入数据库失败，数据已保存在日志文件中, 重启后可恢复", e);
-                }
+                log.info("[SHUTDOWN] 队列中还有 {} 条数据需要入库", remaining.size());
+                jdbcBatchInsert(remaining);
             }
             log.info("[SHUTDOWN] 关闭钩子执行完成");
         }, "gamelog-shutdown-hook"));
     }
 
     /**
-     * 提交日志到异步队列，队列满时降级为同步写入
-     * 同时写入日志文件作为备份
+     * 提交日志到异步队列，队列满时直接丢弃（数据已写入日志文件备份）
      */
     public boolean submit(GameLog gameLog) {
         // 先写入日志文件（数据备份）
@@ -110,22 +107,7 @@ public class GameLogAsyncWriter {
     }
 
     private void startFlushThread() {
-        int threadCount = asyncConfig.getFlushThreads();
-        for (int i = 0; i < threadCount; i++) {
-            Thread flushThread = new Thread(new FlushTask(), "gamelog-flush-" + i);
-            flushThread.setDaemon(true);
-            flushThread.start();
-        }
-        log.info("Async flush threads started: count={}, batchSize={}, flushInterval={}ms, queueCapacity={}",
-                threadCount, asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs(), asyncConfig.getQueueCapacity());
-    }
-
-    /**
-     * 消费任务：从队列取数据，积攒批量后入库
-     */
-    private class FlushTask implements Runnable {
-        @Override
-        public void run() {
+        Thread flushThread = new Thread(() -> {
             List<GameLog> batch = new ArrayList<>(asyncConfig.getBatchSize());
             while (!Thread.currentThread().isInterrupted()) {
                 try {
@@ -157,28 +139,65 @@ public class GameLogAsyncWriter {
                     log.error("异步写入异常", e);
                 }
             }
-        }
+        }, "gamelog-flush");
+        flushThread.setDaemon(true);
+        flushThread.start();
+        log.info("Async flush thread started: batchSize={}, flushInterval={}ms, queueCapacity={}",
+                asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs(), asyncConfig.getQueueCapacity());
     }
 
+    /**
+     * JDBC batch insert：绕过 Hibernate，直接使用 PreparedStatement + executeBatch
+     */
     private void flushBatch(List<GameLog> batch) {
         long start = System.currentTimeMillis();
         totalWriteCount.addAndGet(batch.size());
-        try {
-            gameLogRepository.saveAll(batch);
-            batchWriteCount.incrementAndGet();
-            lastFlushTime = System.currentTimeMillis();
-            long cost = System.currentTimeMillis() - start;
-            log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}, thread={}",
-                    batch.size(), cost, queue.size(), Thread.currentThread().getName());
-        } catch (Exception e) {
-            log.error("[ASYNC-WRITE] Batch write failed, trying one by one: size={}", batch.size(), e);
-            for (GameLog gameLog : batch) {
-                try {
-                    gameLogRepository.save(gameLog);
-                } catch (Exception ex) {
-                    log.error("单条写入失败: gameName={}", gameLog.getGameName(), ex);
-                }
+        jdbcBatchInsert(batch);
+        batchWriteCount.incrementAndGet();
+        lastFlushTime = System.currentTimeMillis();
+        long cost = System.currentTimeMillis() - start;
+        log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}",
+                batch.size(), cost, queue.size());
+    }
+
+    /**
+     * 执行 JDBC batch INSERT
+     * 主键使用 MySQL AUTO_INCREMENT，省掉 id_sequence 管理和 FOR UPDATE 锁开销
+     */
+    private void jdbcBatchInsert(List<GameLog> batch) {
+        if (batch.isEmpty()) return;
+
+        LocalDateTime now = LocalDateTime.now();
+        for (GameLog g : batch) {
+            if (g.getCreatedAt() == null) {
+                g.setCreatedAt(now);
             }
+        }
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(INSERT_SQL)) {
+
+            conn.setAutoCommit(false);
+
+            for (GameLog g : batch) {
+                ps.setString(1, g.getGameName());
+                ps.setString(2, g.getPlayer());
+                ps.setString(3, g.getAction());
+                ps.setString(4, g.getDetail());
+                ps.setTimestamp(5, Timestamp.valueOf(g.getPlayTime()));
+                if (g.getDuration() != null) {
+                    ps.setInt(6, g.getDuration());
+                } else {
+                    ps.setNull(6, Types.INTEGER);
+                }
+                ps.setTimestamp(7, Timestamp.valueOf(g.getCreatedAt()));
+                ps.addBatch();
+            }
+
+            ps.executeBatch();
+            conn.commit();
+        } catch (Exception e) {
+            log.error("[JDBC] Batch INSERT 失败，数据已写入日志文件，重启后可恢复: size={}", batch.size(), e);
         }
     }
 

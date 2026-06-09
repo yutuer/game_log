@@ -21,7 +21,4 @@ public class AsyncConfig {
 
     /** 队列空时睡眠时间（ms） */
     private long flushIntervalMs = 500;
-
-    /** 消费线程数（并行从队列取数据入库） */
-    private int flushThreads = 1;
 }
