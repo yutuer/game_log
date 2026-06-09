@@ -88,23 +88,35 @@ public class StressTest {
 
     private static void runPlayer(int serverId, int playerId, long endTime) {
         String playerName = "Server" + serverId + "-Player" + playerId;
+        int round = 0;
 
         while (System.currentTimeMillis() < endTime) {
+            round++;
             int batchSuccess = 0;
             int batchFail = 0;
+            long batchStart = System.currentTimeMillis();
 
             for (int i = 0; i < LOGS_PER_PLAYER; i++) {
+                long reqStart = System.currentTimeMillis();
                 try {
                     sendLog(serverId, playerName, "action" + (i + 1), "detail" + System.nanoTime());
                     batchSuccess++;
                 } catch (Exception e) {
                     batchFail++;
                 }
+                long reqCost = System.currentTimeMillis() - reqStart;
+                if (reqCost > 100) {
+                    System.out.printf("[SLOW] %s | req#%d cost=%dms%n", playerName, i + 1, reqCost);
+                }
             }
 
             totalRequests.addAndGet(LOGS_PER_PLAYER);
             successCount.addAndGet(batchSuccess);
             failCount.addAndGet(batchFail);
+
+            long batchCost = System.currentTimeMillis() - batchStart;
+            System.out.printf("[SEND] %s | round=%d | ok=%d fail=%d | cost=%dms | sleep=%ds%n",
+                playerName, round, batchSuccess, batchFail, batchCost, INTERVAL_MS / 1000);
 
             try {
                 Thread.sleep(INTERVAL_MS);
