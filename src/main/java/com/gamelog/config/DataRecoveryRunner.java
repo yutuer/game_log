@@ -3,11 +3,15 @@ package com.gamelog.config;
 import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -31,6 +35,9 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
     private final GameLogRepository gameLogRepository;
     private final ObjectMapper objectMapper;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private static final String LOG_PATH = "logs/data";
     private static final int RETENTION_DAYS = 7;  // 保留最近7天日志
@@ -87,15 +94,26 @@ public class DataRecoveryRunner implements ApplicationRunner {
      * 初始化 id_sequence 初始值，从当前 game_log 表最大 ID + 1 开始
      * 避免 Hibernate TABLE 策略分配的 ID 与已有记录主键冲突
      */
-    private void initIdSequence() {
+    @Transactional
+    public void initIdSequence() {
         try {
-            long maxId = gameLogRepository.getMaxId();
+            // 获取当前最大主键 ID
+            Number maxIdResult = (Number) entityManager
+                    .createNativeQuery("SELECT COALESCE(MAX(id), 0) FROM game_log")
+                    .getSingleResult();
+            long maxId = maxIdResult.longValue();
             long startValue = maxId + 1;
-            gameLogRepository.deleteIdSequence();
-            gameLogRepository.insertIdSequence(startValue);
+
+            // 重置 id_sequence（DELETE + INSERT 在同一事务中）
+            entityManager.createNativeQuery("DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'")
+                    .executeUpdate();
+            entityManager.createNativeQuery("INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_id_seq', :startValue)")
+                    .setParameter("startValue", startValue)
+                    .executeUpdate();
+
             log.info("id_sequence 已初始化: gen_value={} (max_id={})", startValue, maxId);
         } catch (Exception e) {
-            log.warn("id_sequence 初始化失败，Hibernate 将使用默认值 0", e);
+            log.warn("id_sequence 初始化失败，Hibernate 将使用默认值", e);
         }
     }
 
