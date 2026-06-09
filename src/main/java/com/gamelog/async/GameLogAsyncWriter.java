@@ -83,8 +83,7 @@ public class GameLogAsyncWriter {
 
         boolean offered = queue.offer(gameLog);
         if (!offered) {
-            log.error("[PRESSURE] Queue FULL! Falling back to sync write: gameName={}", gameLog.getGameName());
-            gameLogRepository.save(gameLog);
+            log.warn("[PRESSURE] 队列已满(20000)，数据已写入日志文件，重启后可恢复");
             return false;
         }
         return true;

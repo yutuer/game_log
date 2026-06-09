@@ -23,11 +23,6 @@
             <DefaultRolloverStrategy max="7"/>
         </RollingFile>
 
-        <!-- 数据日志异步写入：避免 Tomcat 线程阻塞在文件锁上 -->
-        <Async name="AsyncDataLog" bufferSize="65536" blocking="true" includeLocation="false">
-            <AppenderRef ref="DataLog"/>
-        </Async>
-
         <!-- 网关请求/响应日志 RollingFile Appender（按天滚动） -->
         <RollingFile name="GatewayLog"
                      fileName="${GATEWAY_LOG_PATH}/gateway.log"
@@ -38,22 +33,17 @@
             </Policies>
             <DefaultRolloverStrategy max="7"/>
         </RollingFile>
-
-        <!-- 网关日志异步写入 -->
-        <Async name="AsyncGatewayLog" bufferSize="65536" blocking="true" includeLocation="false">
-            <AppenderRef ref="GatewayLog"/>
-        </Async>
     </Appenders>
 
     <Loggers>
-        <!-- 数据日志 Logger（异步写入） -->
+        <!-- 数据日志 Logger -->
         <Logger name="DataLogger" level="info" additivity="false">
-            <AppenderRef ref="AsyncDataLog"/>
+            <AppenderRef ref="DataLog"/>
         </Logger>
 
         <!-- 网关请求/响应日志 Logger -->
         <Logger name="GatewayLogger" level="info" additivity="false">
-            <AppenderRef ref="AsyncGatewayLog"/>
+            <AppenderRef ref="GatewayLog"/>
         </Logger>
 
         <!-- 应用日志 -->
