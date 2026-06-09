@@ -13,6 +13,8 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # ⚠️ 不配置 connection-init-sql：该 SQL 会在每个新连接上执行，
+      # 覆盖 Hibernate PooledLoOptimizer 预分配的序列值，导致 Duplicate entry
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -20,8 +22,8 @@ spring:
     locations: classpath:db/migration
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: false
+      ddl-auto: none
+    show-sql: true
     properties:
       hibernate:
         format_sql: false
