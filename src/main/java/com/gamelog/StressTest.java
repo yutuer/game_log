@@ -103,6 +103,8 @@ public class StressTest {
                     batchSuccess++;
                 } catch (Exception e) {
                     batchFail++;
+                    System.out.printf("[FAIL] %s | req#%d | %s: %s%n",
+                        playerName, i + 1, e.getClass().getSimpleName(), e.getMessage());
                 }
                 long reqCost = System.currentTimeMillis() - reqStart;
                 if (reqCost > 100) {
@@ -152,9 +154,9 @@ public class StressTest {
         }
 
         int responseCode = conn.getResponseCode();
-        conn.disconnect();
 
         if (responseCode != 202 && responseCode != 200) {
+            System.out.printf("[ERR] %s | HTTP %d%n", player, responseCode);
             throw new RuntimeException("HTTP " + responseCode);
         }
     }

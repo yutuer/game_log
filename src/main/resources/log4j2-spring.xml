@@ -36,7 +36,7 @@
     </Appenders>
 
     <Loggers>
-        <!-- 数据日志 Logger（异步写入） -->
+        <!-- 数据日志 Logger -->
         <Logger name="DataLogger" level="info" additivity="false">
             <AppenderRef ref="DataLog"/>
         </Logger>
