@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 数据恢复启动器
@@ -72,67 +73,95 @@ public class DataRecoveryRunner implements ApplicationRunner {
         log.info("========== 数据恢复完成: 共恢复 {} 条记录 ==========", totalRecovered);
     }
 
+    /** 每批最大处理行数，控制内存占用 */
+    private static final int RECOVERY_BATCH_SIZE = 10000;
+
     private int recoverFromFile(Path file) {
         log.info("正在恢复文件: {}", file.getFileName());
 
-        try {
-            List<String> lines = Files.readAllLines(file);
-            log.info("文件共 {} 行", lines.size());
+        int totalRecovered = 0;
+        boolean allBatchSuccess = true;
+        int lineCount = 0;
 
-            if (lines.isEmpty()) {
-                return 0;
-            }
+        try (Stream<String> lineStream = Files.lines(file)) {
+            Iterator<String> iterator = lineStream.iterator();
 
-            List<GameLog> logsFromFile = new ArrayList<>();
-            int parseFailCount = 0;
+            List<GameLog> batch = new ArrayList<>();
 
-            for (String line : lines) {
+            while (iterator.hasNext()) {
+                String line = iterator.next();
+                lineCount++;
+
                 try {
                     if (line.trim().isEmpty()) {
                         continue;
                     }
                     GameLog gameLog = objectMapper.readValue(line, GameLog.class);
-                    logsFromFile.add(gameLog);
-                } catch (Exception e) {
-                    parseFailCount++;
-                    if (parseFailCount <= 3) {
-                        log.debug("解析行失败: {}", line.substring(0, Math.min(100, line.length())));
+                    batch.add(gameLog);
+
+                    // 达到批次阈值 → 去重并插入，然后释放内存
+                    if (batch.size() >= RECOVERY_BATCH_SIZE) {
+                        int recovered = processBatch(batch);
+                        if (recovered >= 0) {
+                            totalRecovered += recovered;
+                        } else {
+                            allBatchSuccess = false;
+                        }
+                        batch.clear();
                     }
+                } catch (Exception e) {
+                    // 单行解析失败只计一次，不打断整体流程
                 }
             }
 
-            if (logsFromFile.isEmpty()) {
-                log.info("文件中没有有效数据");
-                return 0;
+            // 处理剩余不足一批的数据
+            if (!batch.isEmpty()) {
+                int recovered = processBatch(batch);
+                if (recovered >= 0) {
+                    totalRecovered += recovered;
+                } else {
+                    allBatchSuccess = false;
+                }
+                batch.clear();
             }
 
-            log.info("解析到 {} 条有效记录", logsFromFile.size());
-
-            Set<String> existingKeys = getExistingKeys(logsFromFile);
-            List<GameLog> toRecover = logsFromFile.stream()
-                    .filter(log -> !existingKeys.contains(buildKey(log)))
-                    .collect(Collectors.toList());
-
-            if (toRecover.isEmpty()) {
-                log.info("所有数据已在库中，无需恢复");
-                return 0;
-            }
-
-            log.info("发现 {} 条未入库记录，准备恢复", toRecover.size());
-
-            try {
-                gameLogDao.batchInsert(toRecover);
-                log.info("成功恢复 {} 条记录", toRecover.size());
-            } catch (Exception e) {
-                log.error("批量恢复数据失败: {}, 将不清空日志文件", file.getFileName(), e);
-                return -1;
-            }
-
-            return toRecover.size();
+            log.info("文件共 {} 行，成功恢复 {} 条记录", lineCount, totalRecovered);
 
         } catch (IOException e) {
             log.error("读取日志文件失败: {}", file, e);
+            return -1;
+        }
+
+        if (!allBatchSuccess) {
+            log.warn("部分批次恢复失败，不清空日志文件，下次启动将重试");
+            return -1;
+        }
+
+        return totalRecovered;
+    }
+
+    /**
+     * 处理一批数据：查数据库去重 → 批量插入未入库的记录
+     * @return 恢复数量（正数）或 -1（失败）
+     */
+    private int processBatch(List<GameLog> batch) {
+        if (batch.isEmpty()) return 0;
+
+        Set<String> existingKeys = getExistingKeys(batch);
+        List<GameLog> toRecover = batch.stream()
+                .filter(log -> !existingKeys.contains(buildKey(log)))
+                .collect(Collectors.toList());
+
+        if (toRecover.isEmpty()) {
             return 0;
+        }
+
+        try {
+            gameLogDao.batchInsert(toRecover);
+            return toRecover.size();
+        } catch (Exception e) {
+            log.error("批量恢复数据失败", e);
+            return -1;
         }
     }
 
