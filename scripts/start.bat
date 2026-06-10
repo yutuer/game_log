@@ -65,9 +65,8 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    call mvn spring-boot:run ^
-        -Dspring-boot.run.profiles=local ^
-        -Dspring-boot.run.jvmArguments="%JVM_ARGS%"
+    set "SPRING_PROFILES_ACTIVE=local"
+    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="%JVM_ARGS%"
 ) else (
     REM Custom profile
     echo ==========================================
@@ -76,9 +75,8 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    call mvn spring-boot:run ^
-        -Dspring-boot.run.profiles=%MODE% ^
-        -Dspring-boot.run.jvmArguments="%JVM_ARGS%"
+    set "SPRING_PROFILES_ACTIVE=%MODE%"
+    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="%JVM_ARGS%"
 )
 
 echo.
