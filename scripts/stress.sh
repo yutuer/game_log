@@ -49,7 +49,7 @@ echo "  Log: ${LOG_FILE}"
 echo "=========================================="
 
 # 终端实时显示 + 同时写入日志文件
-java -cp "$CP" com.gamelog.StressTest $ARGS 2>&1 | tee "$LOG_FILE"
+java -Xmx256m -Xms128m -cp "$CP" com.gamelog.StressTest $ARGS 2>&1 | tee "$LOG_FILE"
 
 echo ""
 echo "Stress test finished."
