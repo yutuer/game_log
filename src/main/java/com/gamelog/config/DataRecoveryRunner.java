@@ -3,14 +3,12 @@ package com.gamelog.config;
 import com.gamelog.entity.GameLog;
 import com.gamelog.repository.GameLogDao;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.LocalDate;
@@ -30,47 +28,9 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
     private final GameLogDao gameLogDao;
     private final ObjectMapper objectMapper;
-    private final DataSource dataSource;
 
     private static final String LOG_PATH = "logs/data";
     private static final int RETENTION_DAYS = 7;
-
-    /**
-     * 在 Bean 初始化阶段用原生 JDBC 修复 id_sequence
-     */
-    @PostConstruct
-    void init() {
-        fixIdSequenceWithJdbc();
-    }
-
-    /**
-     * 原生 JDBC 方式修复 id_sequence
-     */
-    private void fixIdSequenceWithJdbc() {
-        try {
-            org.springframework.jdbc.core.JdbcTemplate jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
-
-            Long maxId = jdbc.queryForObject(
-                    "SELECT COALESCE(MAX(id), 0) FROM game_log", Long.class);
-            long startValue = (maxId == null ? 0L : maxId) + 50;
-
-            jdbc.update("DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'");
-
-            int updated = jdbc.update(
-                    "UPDATE id_sequence SET gen_value = ? WHERE gen_name = 'game_log_seq'",
-                    startValue);
-            if (updated == 0) {
-                jdbc.update(
-                        "INSERT INTO id_sequence (gen_name, gen_value) VALUES ('game_log_seq', ?)",
-                        startValue);
-            }
-
-            log.info("[EarlyInit] id_sequence 已初始化: gen_value={} (max_id={})",
-                    startValue, maxId);
-        } catch (Exception e) {
-            log.warn("[EarlyInit] 初始化失败（game_log / id_sequence 表可能还不可用）", e);
-        }
-    }
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
