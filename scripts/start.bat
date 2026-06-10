@@ -63,10 +63,13 @@ if /i "%MODE%"=="cloud" (
     echo ==========================================
     echo.
     setlocal
+    REM Set config via env vars (more reliable than -Dspring-boot.run.profiles=)
     set "SPRING_PROFILES_ACTIVE=local"
     set "ASYNC_BATCH_SIZE=3000"
     set "ASYNC_FLUSH_INTERVAL_MS=500"
-    mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+    set "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=10"
+    set "SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2"
+    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
     endlocal
 ) else (
     REM Custom profile
@@ -78,7 +81,7 @@ if /i "%MODE%"=="cloud" (
     echo.
     setlocal
     set "SPRING_PROFILES_ACTIVE=%MODE%"
-    mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
     endlocal
 )
 
