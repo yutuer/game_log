@@ -36,7 +36,7 @@ mvn clean package -DskipTests -q
 echo "Compile done."
 
 # JVM 参数（云服务器 2C2G，保守配置）
-JVM_OPTS="-Xmx512m -Xms256m"
+JVM_OPTS="-Xmx256m -Xms128m"
 JVM_OPTS="${JVM_OPTS} -Dfile.encoding=UTF-8"
 JVM_OPTS="${JVM_OPTS} -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 JVM_OPTS="${JVM_OPTS} -XX:+ExitOnOutOfMemoryError"
