@@ -3,41 +3,21 @@ server:
 
 spring:
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/game_log?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true}
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/game_log?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&cachePrepStmts=true&prepStmtCacheSize=25&prepStmtCacheSqlLimit=2048}
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:10}
-      minimum-idle: ${HIKARI_MIN_IDLE:3}
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-      # ⚠️ 不配置 connection-init-sql：该 SQL 会在每个新连接上执行，
-      # 覆盖 Hibernate PooledLoOptimizer 预分配的序列值，导致 Duplicate entry
+      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 600000
   flyway:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 1.0.4
     locations: classpath:db/migration
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: false
-        show_sql: false
-        dialect: org.hibernate.dialect.MySQLDialect
-        jdbc:
-          batch_size: 1000
-        order_insert: true
-        order_update: true
-        batch_versioned_data: true
-        id:
-          optimizer:
-            pooled:
-              preferred: pooled-lo  # 显式指定 TABLE 生成器使用 PooledLoOptimizer，行为可预测
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
@@ -46,7 +26,7 @@ spring:
 async:
   writer:
     queue-capacity: ${ASYNC_QUEUE_CAPACITY:20000}
-    batch-size: ${ASYNC_BATCH_SIZE:5000}
+    batch-size: ${ASYNC_BATCH_SIZE:3000}
     flush-interval-ms: ${ASYNC_FLUSH_INTERVAL_MS:500}
 
 # Actuator 配置
@@ -63,9 +43,4 @@ management:
 logging:
   level:
     root: WARN
-    org.hibernate: WARN
-    org.hibernate.SQL: WARN
-    org.hibernate.type.descriptor.sql.BasicBinder: WARN
-    org.hibernate.type: WARN
-    org.hibernate.jdbc: WARN
     com.gamelog: INFO

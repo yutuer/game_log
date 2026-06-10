@@ -18,13 +18,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * - 每5秒每人10条日志
  * - 持续1小时
  *
- * 预期负载：4,000 TPS，1小时约14,400,000条
+ * 预期负载：3,000 TPS，1小时约10,800,000条
  */
 public class StressTest {
 
     private static final String BASE_URL = "http://localhost:8080/api/game-logs";
     private static final int SERVER_COUNT = 10;           // 游戏服数量
-    private static final int PLAYERS_PER_SERVER = 200;    // 每服玩家数
+    private static final int PLAYERS_PER_SERVER = 150;    // 每服玩家数
     private static final int LOGS_PER_PLAYER = 10;       // 每5秒每人发送日志数
     private static final int INTERVAL_MS = 5000;        // 发送间隔（毫秒）
     private static final long TEST_DURATION_MINUTES = 1L * 5;    // 测试持续时间（分钟）

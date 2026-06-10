@@ -1,16 +1,14 @@
 package com.gamelog.config;
 
 import com.gamelog.entity.GameLog;
-import com.gamelog.repository.GameLogRepository;
+import com.gamelog.repository.GameLogDao;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -21,9 +19,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-
 /**
  * 数据恢复启动器
  * 启动时检查日志文件，与数据库对比，恢复未入库的数据
@@ -33,17 +28,15 @@ import org.springframework.data.domain.Pageable;
 @RequiredArgsConstructor
 public class DataRecoveryRunner implements ApplicationRunner {
 
-    private final GameLogRepository gameLogRepository;
+    private final GameLogDao gameLogDao;
     private final ObjectMapper objectMapper;
     private final DataSource dataSource;
 
     private static final String LOG_PATH = "logs/data";
-    private static final int RETENTION_DAYS = 7;  // 保留最近7天日志
-    private static final int ID_ALLOCATION_SIZE = 50; // 必须与 GameLog.@TableGenerator(allocationSize) 一致
+    private static final int RETENTION_DAYS = 7;
 
     /**
-     * 在 Bean 初始化阶段（Tomcat 启动前）用原生 JDBC 修复 id_sequence
-     * 此时 JPA 已完成初始化、game_log 表已存在，但 HTTP 端口尚未开放
+     * 在 Bean 初始化阶段用原生 JDBC 修复 id_sequence
      */
     @PostConstruct
     void init() {
@@ -51,15 +44,15 @@ public class DataRecoveryRunner implements ApplicationRunner {
     }
 
     /**
-     * 原生 JDBC 方式修复 id_sequence（不依赖 EntityManager/@Transactional）
+     * 原生 JDBC 方式修复 id_sequence
      */
     private void fixIdSequenceWithJdbc() {
         try {
-            JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+            org.springframework.jdbc.core.JdbcTemplate jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
 
             Long maxId = jdbc.queryForObject(
                     "SELECT COALESCE(MAX(id), 0) FROM game_log", Long.class);
-            long startValue = (maxId == null ? 0L : maxId) + ID_ALLOCATION_SIZE;
+            long startValue = (maxId == null ? 0L : maxId) + 50;
 
             jdbc.update("DELETE FROM id_sequence WHERE gen_name = 'game_log_id_seq'");
 
@@ -80,18 +73,15 @@ public class DataRecoveryRunner implements ApplicationRunner {
     }
 
     @Override
-    @Transactional
     public void run(ApplicationArguments args) throws Exception {
         log.info("========== 数据恢复检查启动 ==========");
 
-        // 1. 检查日志目录是否存在
         Path logDir = Paths.get(LOG_PATH);
         if (!Files.exists(logDir)) {
             log.info("日志目录不存在，跳过数据恢复: {}", logDir);
             return;
         }
 
-        // 2. 获取最近3天的日志文件（足够恢复崩溃丢失的数据）
         List<Path> logFiles = getRecentLogFiles(logDir, 3);
         if (logFiles.isEmpty()) {
             log.info("没有找到需要恢复的日志文件");
@@ -100,7 +90,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
         log.info("找到 {} 个日志文件需要检查", logFiles.size());
 
-        // 3. 逐个文件恢复数据
         int totalRecovered = 0;
         boolean allSyncSuccess = true;
         for (Path file : logFiles) {
@@ -112,10 +101,8 @@ public class DataRecoveryRunner implements ApplicationRunner {
             }
         }
 
-        // 4. 清理过期日志文件
         cleanupOldFiles(logDir);
 
-        // 5. 同步成功后截断当前日志文件，避免文件无限增大
         if (allSyncSuccess) {
             truncateCurrentFile(Paths.get(LOG_PATH));
         } else {
@@ -125,14 +112,10 @@ public class DataRecoveryRunner implements ApplicationRunner {
         log.info("========== 数据恢复完成: 共恢复 {} 条记录 ==========", totalRecovered);
     }
 
-    /**
-     * 从单个日志文件恢复数据
-     */
     private int recoverFromFile(Path file) {
         log.info("正在恢复文件: {}", file.getFileName());
 
         try {
-            // 读取文件所有行
             List<String> lines = Files.readAllLines(file);
             log.info("文件共 {} 行", lines.size());
 
@@ -140,18 +123,14 @@ public class DataRecoveryRunner implements ApplicationRunner {
                 return 0;
             }
 
-            // 解析每行 JSON
             List<GameLog> logsFromFile = new ArrayList<>();
             int parseFailCount = 0;
 
             for (String line : lines) {
                 try {
-                    // 跳过空行
                     if (line.trim().isEmpty()) {
                         continue;
                     }
-
-                    // 每行就是一个 GameLog 的 JSON 字符串
                     GameLog gameLog = objectMapper.readValue(line, GameLog.class);
                     logsFromFile.add(gameLog);
                 } catch (Exception e) {
@@ -169,8 +148,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
             log.info("解析到 {} 条有效记录", logsFromFile.size());
 
-            // 4. 与数据库对比，找出未入库的记录
-            // 使用 (gameName, player, action, playTime) 组合键判断
             Set<String> existingKeys = getExistingKeys(logsFromFile);
             List<GameLog> toRecover = logsFromFile.stream()
                     .filter(log -> !existingKeys.contains(buildKey(log)))
@@ -183,9 +160,8 @@ public class DataRecoveryRunner implements ApplicationRunner {
 
             log.info("发现 {} 条未入库记录，准备恢复", toRecover.size());
 
-            // 5. 批量插入
             try {
-                gameLogRepository.saveAll(toRecover);
+                gameLogDao.batchInsert(toRecover);
                 log.info("成功恢复 {} 条记录", toRecover.size());
             } catch (Exception e) {
                 log.error("批量恢复数据失败: {}, 将不清空日志文件", file.getFileName(), e);
@@ -200,9 +176,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
         }
     }
 
-    /**
-     * 获取最近 N 天的日志文件
-     */
     private List<Path> getRecentLogFiles(Path logDir, int days) {
         List<Path> files = new ArrayList<>();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -211,13 +184,11 @@ public class DataRecoveryRunner implements ApplicationRunner {
             LocalDate date = LocalDate.now().minusDays(i);
             String fileName = "game-log-" + date.format(formatter) + ".jsonl";
             Path file = logDir.resolve(fileName);
-
             if (Files.exists(file)) {
                 files.add(file);
             }
         }
 
-        // 也检查当前文件（未滚动的）
         Path currentFile = logDir.resolve("game-log.jsonl");
         if (Files.exists(currentFile)) {
             files.add(currentFile);
@@ -226,15 +197,11 @@ public class DataRecoveryRunner implements ApplicationRunner {
         return files;
     }
 
-    /**
-     * 获取数据库中已存在的记录键
-     */
     private Set<String> getExistingKeys(List<GameLog> logs) {
         if (logs == null || logs.isEmpty()) {
             return Collections.emptySet();
         }
 
-        // 提取 playTime 的最小值和最大值
         LocalDateTime minTime = logs.stream()
                 .map(GameLog::getPlayTime)
                 .filter(Objects::nonNull)
@@ -252,9 +219,8 @@ public class DataRecoveryRunner implements ApplicationRunner {
             return Collections.emptySet();
         }
 
-        // 查询时间范围内的数据库记录
-        Page<GameLog> dbLogs = gameLogRepository.findByPlayTimeBetween(minTime, maxTime, Pageable.unpaged());
-        Set<String> existingKeys = dbLogs.getContent().stream()
+        List<GameLog> dbLogs = gameLogDao.findByPlayTimeBetween(minTime, maxTime);
+        Set<String> existingKeys = dbLogs.stream()
                 .map(this::buildKey)
                 .collect(Collectors.toSet());
 
@@ -263,9 +229,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
         return existingKeys;
     }
 
-    /**
-     * 构建唯一键
-     */
     private String buildKey(GameLog log) {
         return String.format("%s|%s|%s|%s",
                 log.getGameName(),
@@ -274,9 +237,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
                 log.getPlayTime());
     }
 
-    /**
-     * 清理过期日志文件
-     */
     private void cleanupOldFiles(Path logDir) {
         try {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -286,7 +246,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
                     .filter(path -> path.toString().endsWith(".jsonl"))
                     .filter(path -> {
                         String fileName = path.getFileName().toString();
-                        // 提取日期部分
                         if (fileName.contains("-")) {
                             String dateStr = fileName.replace("game-log-", "").replace(".jsonl", "");
                             try {
@@ -311,10 +270,6 @@ public class DataRecoveryRunner implements ApplicationRunner {
         }
     }
 
-    /**
-     * 数据同步成功后截断当前日志文件
-     * 避免日志文件无限增大导致启动恢复时性能问题
-     */
     private void truncateCurrentFile(Path logDir) {
         Path currentFile = logDir.resolve("game-log.jsonl");
         if (!Files.exists(currentFile)) {

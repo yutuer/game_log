@@ -4,7 +4,6 @@ import com.gamelog.dto.*;
 import com.gamelog.entity.GameLog;
 import com.gamelog.service.GameLogService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -45,8 +44,8 @@ public class GameLogController {
      * 分页查询日志
      */
     @GetMapping
-    public Result<Page<GameLog>> queryGameLogs(GameLogQueryDTO queryDTO) {
-        Page<GameLog> page = gameLogService.queryGameLogs(queryDTO);
+    public Result<PageResult<GameLog>> queryGameLogs(GameLogQueryDTO queryDTO) {
+        PageResult<GameLog> page = gameLogService.queryGameLogs(queryDTO);
         return Result.success(page);
     }
 
@@ -91,8 +90,7 @@ public class GameLogController {
         return Result.success(gameLogService.getQueueStatus());
     }
 
-    // ==================== 独立统计接口（前端渐进式加载） ====================
-    // 排序原则：按页面展示顺序，耗时少的在前
+    // ==================== 独立统计接口 ====================
 
     /** 1. 今日日志总数 */
     @GetMapping("/stats/today-count")
@@ -136,7 +134,7 @@ public class GameLogController {
         return Result.success(gameLogService.getActionDistribution());
     }
 
-    /** 8. 24小时活跃热力图（查询最重） */
+    /** 8. 24小时活跃热力图 */
     @GetMapping("/stats/hourly-activity")
     public Result<List<java.util.Map<String, Object>>> getHourlyActivity() {
         return Result.success(gameLogService.getHourlyActivity());
@@ -147,11 +145,10 @@ public class GameLogController {
      */
     @GetMapping("/export")
     public ResponseEntity<byte[]> exportCsv(GameLogQueryDTO queryDTO) {
-        // 限制最大导出数量
         if (queryDTO.getSize() == null || queryDTO.getSize() > 10000) {
             queryDTO.setSize(10000);
         }
-        Page<GameLog> page = gameLogService.queryGameLogs(queryDTO);
+        PageResult<GameLog> page = gameLogService.queryGameLogs(queryDTO);
         List<GameLog> logs = page.getContent();
 
         StringBuilder csv = new StringBuilder();
@@ -180,6 +177,10 @@ public class GameLogController {
 
     private String escapeCsv(String field) {
         if (field == null) return "";
-        return field.replace("\"", "\"\"");
+        // 标准 CSV 转义：字段含逗号/双引号/换行时，用双引号包裹，内部双引号加倍
+        if (field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r")) {
+            return "\"" + field.replace("\"", "\"\"") + "\"";
+        }
+        return field;
     }
 }

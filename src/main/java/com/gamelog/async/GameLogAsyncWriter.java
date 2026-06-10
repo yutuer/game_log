@@ -29,6 +29,9 @@ public class GameLogAsyncWriter {
     private final AtomicLong totalWriteCount = new AtomicLong(0);
     private volatile long lastFlushTime = 0L;
 
+    // flush 线程引用，用于关闭时协调
+    private volatile Thread flushThread;
+
     private static final String INSERT_SQL = "INSERT INTO game_log (game_name, player, action, detail, play_time, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
     public GameLogAsyncWriter(DataSource dataSource,
@@ -44,16 +47,39 @@ public class GameLogAsyncWriter {
 
     /**
      * 注册关闭钩子，确保服务关闭时将队列中剩余数据写入数据库
+     *
+     * 策略：
+     * 1. 先中断 flush 线程，触发其 drain+flush 当前批次
+     * 2. 等待 flush 线程结束（最多 5 秒），避免重复 drain
+     * 3. 若队列还有剩余，再 flush 一次
+     * 这样既不会重复入库，也不会丢数据
      */
     private void registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            log.info("[SHUTDOWN] 服务关闭中，处理队列剩余数据...");
-            List<GameLog> remaining = new ArrayList<>();
-            queue.drainTo(remaining);
-            if (!remaining.isEmpty()) {
-                log.info("[SHUTDOWN] 队列中还有 {} 条数据需要入库", remaining.size());
-                jdbcBatchInsert(remaining);
+            log.info("[SHUTDOWN] 服务关闭中，等待 flush 线程完成当前批次...");
+
+            // 1. 中断 flush 线程（会触发 InterruptedException 分支中的 drain+flush）
+            if (flushThread != null) {
+                flushThread.interrupt();
+                try {
+                    flushThread.join(5000); // 最多等 5 秒
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
+
+            // 2. 如果队列还有剩余（flush 线程没来得及处理的），再 flush 一次
+            if (queue.isEmpty()) {
+                log.info("[SHUTDOWN] 队列已空，无需处理");
+            } else {
+                List<GameLog> remaining = new ArrayList<>();
+                queue.drainTo(remaining);
+                if (!remaining.isEmpty()) {
+                    log.info("[SHUTDOWN] 队列中还有 {} 条数据需要入库", remaining.size());
+                    jdbcBatchInsert(remaining);
+                }
+            }
+
             log.info("[SHUTDOWN] 关闭钩子执行完成");
         }, "gamelog-shutdown-hook"));
     }
@@ -107,7 +133,7 @@ public class GameLogAsyncWriter {
     }
 
     private void startFlushThread() {
-        Thread flushThread = new Thread(() -> {
+        this.flushThread = new Thread(() -> {
             List<GameLog> batch = new ArrayList<>(asyncConfig.getBatchSize());
             while (!Thread.currentThread().isInterrupted()) {
                 try {
