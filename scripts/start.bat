@@ -17,8 +17,6 @@ REM ============================================================
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=local"
 
-set "JVM_ARGS=-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
-
 set "PROJECT_DIR=%~dp0.."
 
 echo ==========================================
@@ -53,8 +51,7 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    call mvn spring-boot:run ^
-        -Dspring-boot.run.jvmArguments="-Xmx512m %JVM_ARGS%"
+    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Xmx512m -Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
 ) else if /i "%MODE%"=="local" (
     REM Local dev mode: high performance
     echo ==========================================
@@ -65,8 +62,7 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    set "SPRING_PROFILES_ACTIVE=local"
-    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="%JVM_ARGS%"
+    call mvn spring-boot:run -Dspring-boot.run.profiles=local -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
 ) else (
     REM Custom profile
     echo ==========================================
@@ -75,8 +71,7 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    set "SPRING_PROFILES_ACTIVE=%MODE%"
-    call mvn spring-boot:run -Dspring-boot.run.jvmArguments="%JVM_ARGS%"
+    call mvn spring-boot:run -Dspring-boot.run.profiles=%MODE% -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
 )
 
 echo.
