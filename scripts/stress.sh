@@ -9,12 +9,20 @@
 #    ./scripts/stress.sh --url=http://localhost:8080/api/game-logs --cloud
 #
 #  所有参数透传给 StressTest，参见 StressTest --help
+#
+#  日志输出：
+#    终端实时显示 + 同时保存到 logs/stress-{时间戳}.log
 # ============================================================
 
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+# 固定日志文件（每次覆盖，方便 tail -f 追踪）
+LOG_DIR="${PROJECT_DIR}/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/stress.log"
 
 echo "=========================================="
 echo "  Building project for stress test..."
@@ -37,9 +45,18 @@ fi
 echo "=========================================="
 echo "  Starting stress test"
 echo "  Args: $ARGS"
+echo "  Log: ${LOG_FILE}"
 echo "=========================================="
 
-java -cp "$CP" com.gamelog.StressTest $ARGS
+# 终端实时显示 + 同时写入日志文件
+java -cp "$CP" com.gamelog.StressTest $ARGS 2>&1 | tee "$LOG_FILE"
 
 echo ""
 echo "Stress test finished."
+echo "Log saved to: ${LOG_FILE}"
+
+# 显示最后几行（主要看 Final Report）
+echo ""
+echo "===== Final Report (last 10 lines) ====="
+tail -10 "$LOG_FILE"
+echo "========================================"
