@@ -28,6 +28,8 @@ public class GameLogAsyncWriter {
     private final AtomicLong batchWriteCount = new AtomicLong(0);
     private final AtomicLong totalWriteCount = new AtomicLong(0);
     private volatile long lastFlushTime = 0L;
+    private volatile long backlogWarnTime = 0L;
+    private static final long BACKLOG_WARN_COOLDOWN_MS = 30_000L;
 
     // flush 线程引用，用于关闭时协调
     private volatile Thread flushThread;
@@ -97,13 +99,19 @@ public class GameLogAsyncWriter {
                     gameLog.getGameName(), gameLog.getPlayer());
         }
 
-        int currentSize = queue.size();
-        int capacity = queue.remainingCapacity();
+        int backlog = queue.size();
+        int remainingCapacity = queue.remainingCapacity();
 
-        // 压力告警日志
-        if (currentSize > 0 && currentSize % 500 == 0) {
-            log.warn("[PRESSURE] Queue backlog high: size={}, capacity={}, gameName={}",
-                    currentSize, capacity, gameLog.getGameName());
+        // 压力告警：超过阈值（15000）时告警，同一波高压每隔 30 秒重复告警一次
+        if (backlog >= 15000) {
+            long now = System.currentTimeMillis();
+            if (backlogWarnTime == 0 || now - backlogWarnTime > BACKLOG_WARN_COOLDOWN_MS) {
+                backlogWarnTime = now;
+                log.warn("[PRESSURE] Queue backlog high: backlog={}, remainingCapacity={}, totalCapacity={}, gameName={}",
+                        backlog, remainingCapacity, asyncConfig.getQueueCapacity(), gameLog.getGameName());
+            }
+        } else {
+            backlogWarnTime = 0; // 降到阈值以下，复位
         }
 
         boolean offered = queue.offer(gameLog);
