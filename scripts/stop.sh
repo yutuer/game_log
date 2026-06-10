@@ -1,63 +1,62 @@
 #!/bin/bash
 # ============================================================
-# stop.sh - 停止 Tomcat 服务
-# 用途：在阿里云 Linux 服务器上，优雅关闭 Tomcat，若失败则强制终止
-# 使用方式：bash scripts/stop.sh 或 ./scripts/stop.sh
+# stop.sh - 云服务器停止 game-log-service (Linux)
+#
+#  先尝试 actuator 优雅关停，失败则 kill
+#  用法：
+#    ./scripts/stop.sh
 # ============================================================
 
-# ---------- 变量定义 ----------
-TOMCAT_HOME="/usr/local/tomcat"
+APP_NAME="game-log-service"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LOG_DIR="${PROJECT_DIR}/logs"
+PID_FILE="${LOG_DIR}/app.pid"
 
 echo "=========================================="
-echo " 停止 Tomcat"
+echo "  Stopping ${APP_NAME}"
 echo "=========================================="
 
-# ---------- 1. 检查 Tomcat 是否在运行 ----------
-TOMCAT_PID=$(ps -ef | grep "${TOMCAT_HOME}" | grep -v grep | awk '{print $2}')
+# 方式 1：通过 actuator 优雅关停
+echo "Sending shutdown request to actuator..."
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/actuator/shutdown 2>/dev/null || true)
 
-if [ -z "${TOMCAT_PID}" ]; then
-    echo "Tomcat 当前未运行，无需停止"
-    echo "=========================================="
-    exit 0
-fi
-
-echo "检测到 Tomcat 进程，PID: ${TOMCAT_PID}"
-
-# ---------- 2. 优雅关闭 ----------
-echo "[1/2] 执行优雅关闭（shutdown.sh）..."
-if [ -f "${TOMCAT_HOME}/bin/shutdown.sh" ]; then
-    ${TOMCAT_HOME}/bin/shutdown.sh
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "Shutdown request sent successfully."
+    echo "Waiting 5 seconds for graceful shutdown..."
+    sleep 5
 else
-    echo "警告：未找到 ${TOMCAT_HOME}/bin/shutdown.sh，将直接强制终止"
+    echo "Actuator shutdown failed (HTTP ${HTTP_CODE}), trying PID-based kill..."
 fi
 
-# ---------- 3. 等待并检查关闭结果 ----------
-echo "[2/2] 等待 5 秒检查关闭状态..."
-sleep 5
-
-TOMCAT_PID=$(ps -ef | grep "${TOMCAT_HOME}" | grep -v grep | awk '{print $2}')
-
-if [ -n "${TOMCAT_PID}" ]; then
-    echo "Tomcat 未能优雅关闭（PID: ${TOMCAT_PID}），执行强制终止..."
-    kill -9 ${TOMCAT_PID}
-
-    sleep 1
-    TOMCAT_PID=$(ps -ef | grep "${TOMCAT_HOME}" | grep -v grep | awk '{print $2}')
-    if [ -n "${TOMCAT_PID}" ]; then
-        echo "错误：强制终止失败，Tomcat 仍在运行（PID: ${TOMCAT_PID}）"
-        echo "=========================================="
-        exit 1
+# 方式 2：通过 PID 文件 kill
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if kill -0 "$PID" 2>/dev/null; then
+        echo "Stopping process PID=${PID}..."
+        kill "$PID" 2>/dev/null || true
+        sleep 3
+        # 如果还没停，强制 kill
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "Force killing PID=${PID}..."
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    else
+        echo "Process ${PID} not running, cleaning PID file."
     fi
-
-    echo "Tomcat 已被强制终止"
-else
-    echo "Tomcat 已优雅关闭"
+    rm -f "$PID_FILE"
 fi
 
-# ---------- 4. 输出关闭状态 ----------
+# 方式 3：通过 jps 搜索进程
+JAVA_PID=$(jps -l 2>/dev/null | grep -i "gamelog\|GameLogApplication" | awk '{print $1}' || true)
+if [ -n "$JAVA_PID" ]; then
+    echo "Stopping Java process PID=${JAVA_PID} (from jps)..."
+    kill "$JAVA_PID" 2>/dev/null || true
+    sleep 2
+    if kill -0 "$JAVA_PID" 2>/dev/null; then
+        echo "Force killing PID=${JAVA_PID}..."
+        kill -9 "$JAVA_PID" 2>/dev/null || true
+    fi
+fi
+
 echo ""
-echo "=========================================="
-echo " Tomcat 已停止"
-echo "=========================================="
-echo " Tomcat 目录: ${TOMCAT_HOME}"
-echo "=========================================="
+echo "Done."

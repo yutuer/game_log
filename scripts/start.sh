@@ -1,90 +1,69 @@
 #!/bin/bash
 # ============================================================
-# start.sh - 部署并启动 game-log-service
-# 用途：在阿里云 Linux 服务器上，编译项目并将 WAR 包部署到 Tomcat
-# 使用方式：bash scripts/start.sh 或 ./scripts/start.sh
+# start.sh - 云服务器启动 game-log-service (Linux)
+#
+#  云模式（硬编码）：
+#    - 无 profile（使用 application.yml 云默认值）
+#    - JVM: -Xmx512m（限制内存）
+#    - 日志输出到 logs/app.log
+#
+#  用法：
+#    ./scripts/start.sh             启动（后台运行）
+#    ./scripts/start.sh foreground  前台运行（Ctrl+C 停止）
 # ============================================================
 
-# ---------- 变量定义 ----------
+set -e
+
+APP_NAME="game-log-service"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TOMCAT_HOME="/usr/local/tomcat"
-WAR_NAME="game-log-service"
+LOG_DIR="${PROJECT_DIR}/logs"
+APP_LOG="${LOG_DIR}/app.log"
+PID_FILE="${LOG_DIR}/app.pid"
+
+# 创建日志目录
+mkdir -p "$LOG_DIR"
 
 echo "=========================================="
-echo " 开始部署 ${WAR_NAME}"
+echo "  Starting ${APP_NAME} (CLOUD mode)"
+echo "  Project: ${PROJECT_DIR}"
 echo "=========================================="
 
-# ---------- 1. 编译项目 ----------
-echo "[1/5] 进入项目目录: ${PROJECT_DIR}"
-cd "${PROJECT_DIR}" || { echo "错误：无法进入项目目录 ${PROJECT_DIR}"; exit 1; }
+cd "$PROJECT_DIR"
 
-echo "[2/5] 执行 Maven 打包（跳过测试）..."
-mvn clean package -DskipTests
-if [ $? -ne 0 ]; then
-    echo "错误：Maven 打包失败，部署终止"
+# 编译（跳过测试）
+echo "Compiling..."
+mvn clean package -DskipTests -q
+echo "Compile done."
+
+# JVM 参数（云服务器 2C2G，保守配置）
+JVM_OPTS="-Xmx512m -Xms256m"
+JVM_OPTS="${JVM_OPTS} -Dfile.encoding=UTF-8"
+JVM_OPTS="${JVM_OPTS} -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+JVM_OPTS="${JVM_OPTS} -XX:+ExitOnOutOfMemoryError"
+
+JAR_FILE=$(ls target/*.jar 2>/dev/null | head -1)
+
+if [ -z "$JAR_FILE" ]; then
+    echo "Error: No jar file found in target/"
     exit 1
 fi
 
-# ---------- 2. 停止已有的 Tomcat ----------
-echo "[3/5] 停止已有的 Tomcat..."
-if [ -f "${TOMCAT_HOME}/bin/shutdown.sh" ]; then
-    ${TOMCAT_HOME}/bin/shutdown.sh
-    sleep 3
-
-    # 检查是否仍在运行
-    TOMCAT_PID=$(ps -ef | grep "${TOMCAT_HOME}" | grep -v grep | awk '{print $2}')
-    if [ -n "${TOMCAT_PID}" ]; then
-        echo "Tomcat 仍在运行（PID: ${TOMCAT_PID}），强制终止..."
-        kill -9 ${TOMCAT_PID}
-        sleep 2
-    fi
+if [ "$1" = "foreground" ]; then
+    # 前台运行（用于测试）
+    echo "Starting in foreground..."
+    echo "URL: http://localhost:8080"
+    echo "Log: ${APP_LOG}"
+    echo "Press Ctrl+C to stop"
+    echo ""
+    exec java ${JVM_OPTS} -jar "${JAR_FILE}" 2>&1 | tee -a "$APP_LOG"
 else
-    echo "未找到 Tomcat shutdown 脚本，跳过停止步骤"
+    # 后台运行
+    echo "Starting in background..."
+    nohup java ${JVM_OPTS} -jar "${JAR_FILE}" >> "$APP_LOG" 2>&1 &
+    APP_PID=$!
+    echo $APP_PID > "$PID_FILE"
+    echo "PID: ${APP_PID}"
+    echo "URL: http://localhost:8080"
+    echo "Log: ${APP_LOG}"
+    echo "Started."
 fi
-
-# ---------- 3. 复制 WAR 包到 Tomcat ----------
-echo "[4/5] 复制 WAR 包到 Tomcat webapps 目录..."
-WAR_FILE="${PROJECT_DIR}/target/${WAR_NAME}.war"
-if [ ! -f "${WAR_FILE}" ]; then
-    # 尝试匹配 target 下任意 war 文件
-    WAR_FILE=$(ls "${PROJECT_DIR}/target/"*.war 2>/dev/null | head -1)
-fi
-
-if [ -z "${WAR_FILE}" ] || [ ! -f "${WAR_FILE}" ]; then
-    echo "错误：未找到 WAR 包，部署终止"
-    exit 1
-fi
-
-cp "${WAR_FILE}" "${TOMCAT_HOME}/webapps/"
-if [ $? -ne 0 ]; then
-    echo "错误：WAR 包复制失败，部署终止"
-    exit 1
-fi
-echo "已复制: $(basename ${WAR_FILE}) -> ${TOMCAT_HOME}/webapps/"
-
-# ---------- 4. 启动 Tomcat ----------
-echo "[5/5] 启动 Tomcat..."
-if [ -f "${TOMCAT_HOME}/bin/startup.sh" ]; then
-    ${TOMCAT_HOME}/bin/startup.sh
-    if [ $? -ne 0 ]; then
-        echo "错误：Tomcat 启动失败"
-        exit 1
-    fi
-else
-    echo "错误：未找到 Tomcat startup 脚本: ${TOMCAT_HOME}/bin/startup.sh"
-    exit 1
-fi
-
-# ---------- 5. 输出部署状态 ----------
-echo ""
-echo "=========================================="
-echo " 部署完成"
-echo "=========================================="
-echo " 项目目录 : ${PROJECT_DIR}"
-echo " WAR 包   : $(basename ${WAR_FILE})"
-echo " Tomcat   : ${TOMCAT_HOME}"
-echo " 日志路径 : ${TOMCAT_HOME}/logs/catalina.out"
-echo ""
-echo " 查看启动日志命令："
-echo "   tail -f ${TOMCAT_HOME}/logs/catalina.out"
-echo "=========================================="

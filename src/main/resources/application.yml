@@ -1,15 +1,30 @@
+# ============================================================
+#  Game Log Service — 主配置文件
+#
+#  ⚙️ 环境切换（通过 Spring Profile）：
+#
+#    默认（无 profile）= 云服务器模式（保守，省资源）
+#      spring.profiles.active=local  = 本地开发模式（高性能）
+#
+#    或通过环境变量覆盖单个参数：
+#      ASYNC_BATCH_SIZE=3000    # 批量入库大小
+#      HIKARI_MAX_POOL_SIZE=10  # 连接池大小
+# ============================================================
 server:
   port: 8080
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:}     # 默认空（云模式），设为 local 切换本地模式
+
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://localhost:3306/game_log?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&cachePrepStmts=true&prepStmtCacheSize=25&prepStmtCacheSqlLimit=2048}
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:10}
-      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:3}
+      minimum-idle: ${HIKARI_MIN_IDLE:1}
       connection-timeout: 10000
       idle-timeout: 300000
       max-lifetime: 600000
@@ -26,8 +41,8 @@ spring:
 async:
   writer:
     queue-capacity: ${ASYNC_QUEUE_CAPACITY:20000}
-    batch-size: ${ASYNC_BATCH_SIZE:3000}
-    flush-interval-ms: ${ASYNC_FLUSH_INTERVAL_MS:500}
+    batch-size: ${ASYNC_BATCH_SIZE:500}
+    flush-interval-ms: ${ASYNC_FLUSH_INTERVAL_MS:200}
 
 # Actuator 配置
 management:
