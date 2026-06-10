@@ -62,7 +62,12 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    call mvn spring-boot:run -Dspring-boot.run.profiles=local -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+    setlocal
+    set "SPRING_PROFILES_ACTIVE=local"
+    set "ASYNC_BATCH_SIZE=3000"
+    set "ASYNC_FLUSH_INTERVAL_MS=500"
+    mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+    endlocal
 ) else (
     REM Custom profile
     echo ==========================================
@@ -71,7 +76,10 @@ if /i "%MODE%"=="cloud" (
     echo  Press Ctrl+C to stop
     echo ==========================================
     echo.
-    call mvn spring-boot:run -Dspring-boot.run.profiles=%MODE% -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+    setlocal
+    set "SPRING_PROFILES_ACTIVE=%MODE%"
+    mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8"
+    endlocal
 )
 
 echo.
