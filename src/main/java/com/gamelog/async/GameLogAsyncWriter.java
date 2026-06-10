@@ -29,8 +29,8 @@ public class GameLogAsyncWriter {
     private final AtomicLong totalWriteCount = new AtomicLong(0);
     private volatile long lastFlushTime = 0L;
 
-    // flush 线程引用，用于关闭时协调
-    private volatile Thread flushThread;
+    // flush 线程引用数组，用于关闭时协调
+    private volatile Thread[] flushThreads = new Thread[2];
 
     private static final String INSERT_SQL = "INSERT INTO game_log (game_name, player, action, detail, play_time, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
@@ -41,7 +41,7 @@ public class GameLogAsyncWriter {
         this.asyncConfig = asyncConfig;
         this.dataLogWriter = dataLogWriter;
         this.queue = new LinkedBlockingQueue<>(asyncConfig.getQueueCapacity());
-        startFlushThread();
+        startFlushThreads();
         registerShutdownHook();
     }
 
@@ -58,13 +58,19 @@ public class GameLogAsyncWriter {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("[SHUTDOWN] 服务关闭中，等待 flush 线程完成当前批次...");
 
-            // 1. 中断 flush 线程（会触发 InterruptedException 分支中的 drain+flush）
-            if (flushThread != null) {
-                flushThread.interrupt();
-                try {
-                    flushThread.join(5000); // 最多等 5 秒
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+            // 1. 中断所有 flush 线程（会触发 InterruptedException 分支中的 drain+flush）
+            for (int i = 0; i < flushThreads.length; i++) {
+                if (flushThreads[i] != null) {
+                    flushThreads[i].interrupt();
+                }
+            }
+            for (int i = 0; i < flushThreads.length; i++) {
+                if (flushThreads[i] != null) {
+                    try {
+                        flushThreads[i].join(5000); // 最多等 5 秒
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
 
@@ -132,43 +138,47 @@ public class GameLogAsyncWriter {
         return queue.size();
     }
 
-    private void startFlushThread() {
-        this.flushThread = new Thread(() -> {
-            List<GameLog> batch = new ArrayList<>(asyncConfig.getBatchSize());
-            while (!Thread.currentThread().isInterrupted()) {
-                try {
-                    // 等待第一条日志，最多等 flushIntervalMs
-                    GameLog first = queue.poll();
-                    if (first != null) {
-                        batch.add(first);
-                    }
+    private void startFlushThreads() {
+        for (int i = 0; i < 2; i++) {
+            final int threadIndex = i;
+            Thread t = new Thread(() -> {
+                List<GameLog> batch = new ArrayList<>(asyncConfig.getBatchSize());
+                while (!Thread.currentThread().isInterrupted()) {
+                    try {
+                        // 等待第一条日志，最多等 flushIntervalMs
+                        GameLog first = queue.poll();
+                        if (first != null) {
+                            batch.add(first);
+                        }
 
-                    // 积攒批量
-                    queue.drainTo(batch, asyncConfig.getBatchSize() - batch.size());
+                        // 积攒批量
+                        queue.drainTo(batch, asyncConfig.getBatchSize() - batch.size());
 
-                    if (!batch.isEmpty()) {
-                        flushBatch(batch);
-                        batch.clear();
-                    } else {
-                        // 没有数据，等待一小段时间
-                        Thread.sleep(asyncConfig.getFlushIntervalMs());
+                        if (!batch.isEmpty()) {
+                            flushBatch(batch);
+                            batch.clear();
+                        } else {
+                            // 没有数据，等待一小段时间
+                            Thread.sleep(asyncConfig.getFlushIntervalMs());
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        // 关闭前刷新剩余数据
+                        queue.drainTo(batch);
+                        if (!batch.isEmpty()) {
+                            flushBatch(batch);
+                        }
+                        break;
+                    } catch (Exception e) {
+                        log.error("异步写入异常 [{}]", Thread.currentThread().getName(), e);
                     }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    // 关闭前刷新剩余数据
-                    queue.drainTo(batch);
-                    if (!batch.isEmpty()) {
-                        flushBatch(batch);
-                    }
-                    break;
-                } catch (Exception e) {
-                    log.error("异步写入异常", e);
                 }
-            }
-        }, "gamelog-flush");
-        flushThread.setDaemon(true);
-        flushThread.start();
-        log.info("Async flush thread started: batchSize={}, flushInterval={}ms, queueCapacity={}",
+            }, "gamelog-flush-" + threadIndex);
+            t.setDaemon(true);
+            t.start();
+            flushThreads[threadIndex] = t;
+        }
+        log.info("Async flush threads started (x2): batchSize={}, flushInterval={}ms, queueCapacity={}",
                 asyncConfig.getBatchSize(), asyncConfig.getFlushIntervalMs(), asyncConfig.getQueueCapacity());
     }
 
@@ -182,8 +192,8 @@ public class GameLogAsyncWriter {
         batchWriteCount.incrementAndGet();
         lastFlushTime = System.currentTimeMillis();
         long cost = System.currentTimeMillis() - start;
-        log.info("[ASYNC-WRITE] Batch write: size={}, cost={}ms, queue_remaining={}",
-                batch.size(), cost, queue.size());
+        log.info("[ASYNC-WRITE] Batch write [{}]: size={}, cost={}ms, queue_remaining={}",
+                Thread.currentThread().getName(), batch.size(), cost, queue.size());
     }
 
     /**
