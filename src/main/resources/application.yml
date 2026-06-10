@@ -26,7 +26,7 @@ spring:
 async:
   writer:
     queue-capacity: ${ASYNC_QUEUE_CAPACITY:20000}
-    batch-size: ${ASYNC_BATCH_SIZE:3000}
+    batch-size: ${ASYNC_BATCH_SIZE:6000}
     flush-interval-ms: ${ASYNC_FLUSH_INTERVAL_MS:500}
 
 # Actuator 配置
