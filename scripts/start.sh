@@ -41,10 +41,14 @@ JVM_OPTS="${JVM_OPTS} -Dfile.encoding=UTF-8"
 JVM_OPTS="${JVM_OPTS} -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 JVM_OPTS="${JVM_OPTS} -XX:+ExitOnOutOfMemoryError"
 
+# 查找打包产物（支持 jar 和 war）
 JAR_FILE=$(ls target/*.jar 2>/dev/null | head -1)
+if [ -z "$JAR_FILE" ]; then
+    JAR_FILE=$(ls target/*.war 2>/dev/null | head -1)
+fi
 
 if [ -z "$JAR_FILE" ]; then
-    echo "Error: No jar file found in target/"
+    echo "Error: No jar/war file found in target/"
     exit 1
 fi
 
